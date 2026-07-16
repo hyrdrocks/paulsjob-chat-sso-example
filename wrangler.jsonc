@@ -1,0 +1,24 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "paulsjob-chat-sso-example",
+  "main": "worker.mjs",
+  // >= 2025-09-01 auto-enables enable_nodejs_http_server_modules, which
+  // httpServerHandler needs to run the Express app in server.js.
+  "compatibility_date": "2026-07-01",
+  "compatibility_flags": ["nodejs_compat"],
+  // Serves public/ directly; the Worker handles the API routes below it.
+  "assets": { "directory": "./public" },
+  // Express imports body-parser -> iconv-lite at load time, which does not bundle for
+  // Workers. This app never parses a request body, so the stub is never called.
+  // See iconv-lite-stub.mjs.
+  "alias": { "iconv-lite": "./iconv-lite-stub.mjs" },
+  "observability": { "enabled": true },
+  // Secrets are NOT here. Set them once with:
+  //   wrangler secret put SSO_PRIVATE_KEY
+  //   wrangler secret put SSO_KEY_ID
+  "vars": {
+    "COMPANY_SLUG": "paul-s-job-staging",
+    "WIDGET_SDK_URL": "https://paul-s-job-staging.staging.chatbot.app.paulsjob.ai/sdk.iife.js",
+    "EMPLOYEE_MODE": "true"
+  }
+}

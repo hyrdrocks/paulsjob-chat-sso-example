@@ -1,0 +1,580 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paul's Job chat widget — SSO integration guide</title>
+<script>
+  // Apply theme before first paint so there's no flash.
+  (() => {
+    const saved = localStorage.getItem('theme')
+    const dark = saved ? saved === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches
+    if (dark) document.documentElement.classList.add('dark')
+  })()
+</script>
+<style>
+  :root {
+    --ivory:   #FAF9F5;
+    --paper:   #FFFFFF;
+    --slate:   #141413;
+    --clay:    #D97757;
+    --oat:     #E3DACC;
+    --oat-bg:  rgba(227,218,204,0.35);
+    --olive:   #788C5D;
+    --rose:    #B4453C;
+    --rose-bg: rgba(180,69,60,0.08);
+    --gray-150:#F0EEE6;
+    --gray-300:#D1CFC5;
+    --gray-500:#87867F;
+    --gray-700:#3D3D3A;
+    --serif: ui-serif, Georgia, "Times New Roman", serif;
+    --sans:  system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono:  ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  html.dark {
+    --ivory:   #16171A;
+    --paper:   #1C1E22;
+    --slate:   #F2F0EA;
+    --clay:    #E0906E;
+    --oat:     #3A3730;
+    --oat-bg:  rgba(58,55,48,0.5);
+    --olive:   #9DB37E;
+    --rose:    #E88A82;
+    --rose-bg: rgba(232,138,130,0.10);
+    --gray-150:#23262B;
+    --gray-300:#343941;
+    --gray-500:#8B8F98;
+    --gray-700:#C9CCD2;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--ivory);
+    color: var(--gray-700);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+    padding: 56px 24px 120px;
+  }
+  .page { max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: 210px minmax(0,1fr); gap: 48px; }
+  @media (max-width: 920px) { .page { grid-template-columns: 1fr; } nav.toc { display: none; } }
+
+  /* ── nav ── */
+  nav.toc { position: sticky; top: 32px; align-self: start; font-size: 13px; }
+  nav.toc .label {
+    font-family: var(--mono); font-size: 10px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--gray-500); margin-bottom: 12px;
+  }
+  nav.toc a {
+    display: block; padding: 5px 0 5px 12px; border-left: 2px solid var(--gray-300);
+    color: var(--gray-700); text-decoration: none;
+  }
+  nav.toc a:hover { color: var(--slate); border-color: var(--clay); }
+  nav.toc .files { margin-top: 28px; border-top: 1px solid var(--gray-300); padding-top: 16px; }
+  nav.toc .files code { display: block; font-family: var(--mono); font-size: 11px; color: var(--gray-500); padding: 3px 0; }
+
+  /* ── theme toggle ── */
+  .theme {
+    position: fixed; top: 18px; right: 18px; z-index: 10;
+    font-family: var(--mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+    background: var(--paper); color: var(--gray-500);
+    border: 1.5px solid var(--gray-300); border-radius: 8px;
+    padding: 7px 11px; cursor: pointer;
+  }
+  .theme:hover { color: var(--slate); border-color: var(--clay); }
+
+  /* ── header ── */
+  .eyebrow {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--gray-500); margin-bottom: 10px;
+  }
+  h1 { font-family: var(--serif); font-weight: 500; font-size: 32px; color: var(--slate); letter-spacing: -.01em; margin-bottom: 14px; }
+  .tldr {
+    border: 1.5px solid var(--gray-300); border-left: 3px solid var(--clay);
+    border-radius: 10px; background: var(--paper); padding: 16px 18px; margin-bottom: 8px;
+  }
+  .tldr b { color: var(--slate); }
+  h2 { font-family: var(--serif); font-weight: 500; font-size: 22px; color: var(--slate); margin: 44px 0 14px; scroll-margin-top: 24px; }
+  h3 { font-family: var(--serif); font-weight: 500; font-size: 17px; color: var(--slate); margin: 24px 0 8px; }
+  p { margin-bottom: 12px; max-width: 720px; }
+  a { color: var(--clay); }
+  code { font-family: var(--mono); font-size: 13px; }
+  p code, li code, td code, dd code { background: var(--gray-150); padding: 1px 5px; border-radius: 4px; }
+  ul, ol { padding-left: 20px; max-width: 720px; margin-bottom: 12px; }
+  li { margin-bottom: 7px; }
+  strong { color: var(--slate); }
+
+  /* ── steps ── */
+  .step { display: flex; gap: 14px; align-items: baseline; margin: 40px 0 12px; scroll-margin-top: 24px; }
+  .step .n {
+    font-family: var(--mono); font-size: 11px; color: var(--paper); background: var(--clay);
+    width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; flex: none;
+    transform: translateY(3px);
+  }
+  .step h2 { margin: 0; }
+
+  /* ── code ── */
+  pre {
+    background: var(--paper); border: 1.5px solid var(--gray-300); border-radius: 10px;
+    padding: 16px 18px; font-family: var(--mono); font-size: 12.5px; line-height: 1.6;
+    color: var(--slate); overflow-x: auto; margin: 14px 0;
+  }
+  pre .cm { color: var(--gray-500); }
+  pre .hl { color: var(--clay); }
+  pre .ok { color: var(--olive); }
+
+  /* ── tabs ── */
+  .tabs { border: 1.5px solid var(--gray-300); border-radius: 10px; background: var(--paper); margin: 16px 0; overflow: hidden; }
+  .tabbar { display: flex; border-bottom: 1px solid var(--gray-300); background: var(--gray-150); }
+  .tabbar button {
+    appearance: none; border: none; background: none; font-family: var(--mono); font-size: 12px;
+    color: var(--gray-500); padding: 10px 16px; cursor: pointer; border-right: 1px solid var(--gray-300);
+  }
+  .tabbar button.on { background: var(--paper); color: var(--slate); border-bottom: 2px solid var(--clay); margin-bottom: -1px; }
+  .tabs pre { display: none; margin: 0; border: 0; border-radius: 0; }
+  .tabs pre.on { display: block; }
+
+  /* ── callouts ── */
+  .callout { display: flex; gap: 12px; border: 1.5px solid var(--oat); background: var(--oat-bg); border-radius: 10px; padding: 14px 16px; margin: 18px 0; font-size: 14px; }
+  .callout .ico { color: var(--clay); font-weight: 600; flex: none; }
+  .callout.warn { border-color: var(--rose); background: var(--rose-bg); }
+  .callout.warn .ico { color: var(--rose); }
+
+  /* ── table ── */
+  .twrap { overflow-x: auto; margin: 16px 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; background: var(--paper); border: 1.5px solid var(--gray-300); border-radius: 10px; overflow: hidden; }
+  th, td { text-align: left; padding: 9px 13px; border-bottom: 1px solid var(--gray-300); vertical-align: top; }
+  th { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--gray-500); background: var(--gray-150); font-weight: 500; }
+  tr:last-child td { border-bottom: 0; }
+  .yes { color: var(--olive); font-weight: 600; }
+  .no  { color: var(--rose);  font-weight: 600; }
+
+  /* ── figure ── */
+  figure { margin: 18px 0; }
+  figure img { width: 100%; border: 1.5px solid var(--gray-300); border-radius: 10px; display: block; }
+  figcaption { font-size: 12.5px; color: var(--gray-500); margin-top: 7px; }
+
+  /* ── flow diagram ── */
+  .flow { background: var(--paper); border: 1.5px solid var(--gray-300); border-radius: 10px; padding: 18px; margin: 16px 0; overflow-x: auto; }
+  .flow svg { display: block; min-width: 620px; width: 100%; height: auto; }
+  .flow .box { fill: var(--gray-150); stroke: var(--gray-300); }
+  .flow .box-hl { fill: var(--oat-bg); stroke: var(--clay); }
+  .flow .lbl { fill: var(--slate); font: 600 12px var(--sans); }
+  .flow .sub { fill: var(--gray-500); font: 10.5px var(--mono); }
+  .flow .arw { stroke: var(--gray-500); stroke-width: 1.4; fill: none; }
+  .flow .arwlbl { fill: var(--gray-500); font: 10.5px var(--mono); }
+
+  /* ── faq ── */
+  dl.faq dt { font-family: var(--serif); font-size: 16px; color: var(--slate); margin-top: 20px; }
+  dl.faq dd { font-size: 14px; margin: 4px 0 0; max-width: 700px; }
+
+  details { border: 1.5px solid var(--gray-300); border-radius: 10px; background: var(--paper); margin: 12px 0; overflow: hidden; }
+  summary { list-style: none; cursor: pointer; padding: 13px 16px; font-family: var(--serif); font-size: 15.5px; color: var(--slate); display: flex; align-items: baseline; gap: 10px; }
+  summary::-webkit-details-marker { display: none; }
+  summary::before { content: "▸"; color: var(--clay); font-family: var(--sans); font-size: 12px; transition: transform 120ms; }
+  details[open] summary::before { transform: rotate(90deg); }
+  details .body { padding: 0 16px 14px; }
+  details .body p:last-child { margin-bottom: 0; }
+
+  @media print {
+    body { padding: 0; background: #fff; }
+    .page { grid-template-columns: 1fr; }
+    nav.toc, .theme { display: none; }
+    h2 { break-after: avoid; }
+    pre, table, figure, .callout { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<button class="theme" id="theme">Dark</button>
+<div class="page">
+
+  <nav class="toc">
+    <div class="label">On this page</div>
+    <a href="#tldr">TL;DR</a>
+    <a href="#how">How it works</a>
+    <a href="#s1">1 · Generate a key pair</a>
+    <a href="#s2">2 · Sign on your backend</a>
+    <a href="#s3">3 · Load the widget</a>
+    <a href="#s4">4 · Log out</a>
+    <a href="#checks">What's actually checked</a>
+    <a href="#security">Security</a>
+    <a href="#trouble">Troubleshooting</a>
+    <a href="#faq">FAQ</a>
+    <div class="files">
+      <div class="label">Runnable example</div>
+      <code>server.js</code>
+      <code>public/index.html</code>
+      <code>test-sign.js</code>
+      <code>.env.example</code>
+    </div>
+  </nav>
+
+  <main>
+    <header>
+      <div class="eyebrow">Paul's Job chat widget · integration guide</div>
+      <h1>SSO auto-login from your website</h1>
+      <div class="tldr" id="tldr">
+        <b>TL;DR</b> — When someone logs into your site, your <em>backend</em> signs a short-lived RS256 JWT
+        with your company's SSO private key. Your page hands that token to the widget via
+        <code>verifyToken()</code>, and the user is logged in — no second sign-in. The private key never
+        reaches the browser. You need three values from Chrysus: a <strong>private key</strong>, its
+        <strong>key ID</strong> (<code>kid</code>), and your <strong>company slug</strong>.
+      </div>
+    </header>
+
+    <p>This guide accompanies a complete, runnable example. Everything here was verified end-to-end against
+      the live API — the code below is the code that ran.</p>
+
+    <h2 id="how">How it works</h2>
+    <p>Three parties. Only the middle one is yours to build.</p>
+
+    <div class="flow">
+      <svg viewBox="0 0 720 220" role="img" aria-label="Flow: your site signs a token, the widget verifies it with the Paul's Job API">
+        <rect class="box" x="8" y="30" width="150" height="58" rx="9"/>
+        <text class="lbl" x="83" y="54" text-anchor="middle">Your user</text>
+        <text class="sub" x="83" y="72" text-anchor="middle">logs into your site</text>
+
+        <rect class="box-hl" x="210" y="20" width="180" height="78" rx="9"/>
+        <text class="lbl" x="300" y="46" text-anchor="middle">Your backend</text>
+        <text class="sub" x="300" y="64" text-anchor="middle">signs RS256 JWT</text>
+        <text class="sub" x="300" y="80" text-anchor="middle">private key lives here</text>
+
+        <rect class="box" x="210" y="140" width="180" height="58" rx="9"/>
+        <text class="lbl" x="300" y="164" text-anchor="middle">Your page</text>
+        <text class="sub" x="300" y="182" text-anchor="middle">verifyToken(token)</text>
+
+        <rect class="box" x="450" y="70" width="180" height="78" rx="9"/>
+        <text class="lbl" x="540" y="96" text-anchor="middle">Paul's Job API</text>
+        <text class="sub" x="540" y="114" text-anchor="middle">checks signature</text>
+        <text class="sub" x="540" y="130" text-anchor="middle">finds your key by kid</text>
+
+        <path class="arw" d="M158 59 H205" marker-end="url(#a)"/>
+        <path class="arw" d="M300 98 V136" marker-end="url(#a)"/>
+        <text class="arwlbl" x="308" y="122">token</text>
+        <path class="arw" d="M390 169 H430 Q450 169 450 149 V132" marker-end="url(#a)"/>
+        <path class="arw" d="M540 148 V190 H394" marker-end="url(#a)"/>
+        <text class="arwlbl" x="470" y="184" text-anchor="middle">session</text>
+        <defs>
+          <marker id="a" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto">
+            <path d="M0 0 L8 4 L0 8 z" fill="var(--gray-500)"/>
+          </marker>
+        </defs>
+      </svg>
+    </div>
+
+    <ol>
+      <li>The user signs into <strong>your site</strong>, using whatever auth you already have.</li>
+      <li>Your <strong>backend</strong> signs a JWT identifying that user, using your SSO private key.</li>
+      <li>Your <strong>page</strong> passes the token to the widget with <code>verifyToken()</code>.</li>
+      <li>The <strong>Paul's Job API</strong> finds your company's public key via the token's <code>kid</code>,
+        verifies the signature, and returns a widget session.</li>
+    </ol>
+
+    <div class="callout">
+      <span class="ico">★</span>
+      <div>The only thing that proves identity is <strong>the signature</strong>. Anyone holding your private key
+        can log in as anyone in your company. Treat it like a database password.</div>
+    </div>
+
+    <div class="step" id="s1"><span class="n">1</span><h2>Generate a key pair in Chrysus</h2></div>
+    <p>In your Paul's Job dashboard go to <strong>Settings → Developer &amp; Security → SSO Key Management</strong>.</p>
+
+    <figure>
+      <img src="images/04-chrysus-sso-keys.png" alt="Chrysus SSO Key Management, listing existing key pairs with their key ID and status">
+      <figcaption>Settings → Developer &amp; Security → SSO Key Management. Each key shows its algorithm, size and creation date.</figcaption>
+    </figure>
+
+    <p>Open the <strong>Generate Key</strong> tab, give the key a name, and keep the default
+      <strong>2048-bit RSA</strong>. An expiry date is optional but recommended.</p>
+
+    <figure>
+      <img src="images/05-chrysus-generate-key.png" alt="The Generate New Key Pair form: key name, description, key size and an optional expiration date">
+      <figcaption>Generating a key pair. The private key is shown <strong>once</strong>, immediately after generation.</figcaption>
+    </figure>
+
+    <div class="callout warn">
+      <span class="ico">!</span>
+      <div><strong>Copy the private key when it is shown.</strong> Store it in your secret manager straight away.
+        Then note the <strong>key ID</strong> (<code>kid</code>, e.g. <code>20260101-a1b2</code>) shown next to the
+        key — your tokens must carry it, or the API cannot tell which public key to check against.</div>
+    </div>
+
+    <div class="step" id="s2"><span class="n">2</span><h2>Sign a token on your backend</h2></div>
+    <p>This must happen server-side. The whole security model is that the private key stays on your server.</p>
+
+    <div class="tabs" data-tabs>
+      <div class="tabbar">
+        <button class="on" data-t="0">server.js</button>
+        <button data-t="1">.env</button>
+        <button data-t="2">the token</button>
+      </div>
+<pre class="on"><span class="cm">// Sign an SSO token for ONE logged-in user.</span>
+const jwt = require('jsonwebtoken')
+
+const TOKEN_TTL_SECONDS = 5 * 60   <span class="cm">// short: this is a credential</span>
+
+function signSsoToken({ email, name }) {
+  const now = Math.floor(Date.now() / 1000)
+  return jwt.sign(
+    { email, name, iat: now, exp: now + TOKEN_TTL_SECONDS },
+    process.env.SSO_PRIVATE_KEY.replace(/\\n/g, '\n'),
+    { algorithm: <span class="hl">'RS256'</span>, keyid: <span class="hl">process.env.SSO_KEY_ID</span> },
+  )
+}
+
+app.post('/sso-token', (req, res) =&gt; {
+  <span class="cm">// Derive the user from YOUR OWN session — never from the request body.</span>
+  const user = getCurrentUser(req)
+  if (!user) return res.status(401).json({ error: 'not logged in' })
+
+  res.set('Cache-Control', 'no-store')
+  res.json({ token: signSsoToken(user) })
+})</pre>
+<pre><span class="cm"># Never commit this file.</span>
+SSO_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\nMIIEow...\n-----END RSA PRIVATE KEY-----"
+SSO_KEY_ID="20260101-a1b2"
+COMPANY_SLUG="acme"
+WIDGET_SDK_URL="https://acme.chatbot.app.paulsjob.ai/sdk.iife.js"
+EMPLOYEE_MODE="true"</pre>
+<pre><span class="cm">// header</span>
+{ "alg": "RS256", "typ": "JWT", "kid": <span class="hl">"20260101-a1b2"</span> }
+
+<span class="cm">// payload — `email` is the only claim the API requires</span>
+{
+  "email": <span class="hl">"demo.user@example.com"</span>,
+  "name":  "Demo User",
+  "iat":   1784196450,
+  "exp":   1784196750
+}</pre>
+    </div>
+
+    <div class="callout warn">
+      <span class="ico">!</span>
+      <div>Take the email from your <strong>server-side session</strong>, never from the request body. An endpoint
+        that signs whatever email it is posted lets any visitor log in as your CEO.</div>
+    </div>
+
+    <div class="step" id="s3"><span class="n">3</span><h2>Load the widget on your page</h2></div>
+    <p>Two things matter here: pass <strong><code>domain</code></strong>, and give the widget an
+      <strong><code>onStartAutologin</code></strong> callback that fetches your token.</p>
+
+<pre><span class="cm">// 1. Ask your backend for a token, hand it to the widget.</span>
+async function autologin() {
+  const res = await fetch('/sso-token', { method: 'POST' })
+  const { token } = await res.json()
+  await window.HyrdWidget.<span class="hl">verifyToken</span>(token)
+}
+
+const config = {
+  company: 'acme',
+  <span class="cm">// REQUIRED on your own site — see the warning below.</span>
+  <span class="hl">domain</span>: 'https://acme.chatbot.app.paulsjob.ai',
+  employee_mode: true,
+  <span class="cm">// The SDK awaits this in YOUR frame, so async is fine here.</span>
+  <span class="hl">onStartAutologin</span>: async () =&gt; { await autologin() },
+}
+
+<span class="cm">// 2. If the SDK is already loaded, start directly. If not, queue the config</span>
+<span class="cm">//    and load the SDK from your own widget domain — it drains readyQueue on load.</span>
+if (window.HyrdWidget) {
+  window.HyrdWidget.<span class="hl">startWidget</span>(config)
+} else {
+  window.HyrdWidget = { <span class="hl">readyQueue</span>: [config] }
+
+  const s = document.createElement('script')
+  s.src = 'https://acme.chatbot.app.paulsjob.ai/sdk.iife.js'
+  s.async = true
+  document.body.appendChild(s)
+}</pre>
+
+    <div class="callout warn">
+      <span class="ico">!</span>
+      <div><strong>Don't omit <code>domain</code>.</strong> The widget opens iframes at <code>&lt;domain&gt;/chat/…</code>.
+        Without it, the SDK looks for them on <em>your</em> origin — you'll see <code>404</code>s for
+        <code>/chat/…</code> against your own site — and the API sees your site's Origin, which it can't map
+        to a company (<code>unknown company configuration</code>).</div>
+    </div>
+
+    <figure>
+      <img src="images/02-widget-launcher.png" alt="The example site, signed in, with the branded chat launcher in the bottom corner">
+      <figcaption>Signed into the demo site. The widget has auto-logged-in and the launcher appears — where it sits is your widget's own configuration.</figcaption>
+    </figure>
+
+    <figure>
+      <img src="images/03-chat-open.png" alt="The chat panel open, greeting the signed-in user">
+      <figcaption>Opening the launcher — the user is already authenticated. No second login.</figcaption>
+    </figure>
+
+    <div class="step" id="s4"><span class="n">4</span><h2>Log out</h2></div>
+    <p>Your logout must tear the widget down too. Order matters.</p>
+
+<pre><span class="cm">// clearToken() first — it drops the widget's stored session.</span>
+<span class="cm">// destroy() removes the iframes and listeners.</span>
+await window.HyrdWidget.<span class="hl">clearToken</span>()
+window.HyrdWidget.<span class="hl">destroy</span>()</pre>
+
+    <div class="callout warn">
+      <span class="ico">!</span>
+      <div>Skipping <code>clearToken()</code> leaves the session behind. On a shared computer the next person
+        opens the widget as the previous user. <code>destroy()</code> alone removes the iframes but
+        <em>not</em> the stored token.</div>
+    </div>
+
+    <h2 id="checks">What the API actually checks</h2>
+    <p>Worth knowing precisely, because it is narrower than most people assume. Verified by signing token
+      variants against the live endpoint:</p>
+
+    <div class="twrap">
+      <table>
+        <thead><tr><th>Token</th><th>Result</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>email</code> + <code>exp</code> + <code>iat</code></td><td class="yes">accepted</td><td>The normal case.</td></tr>
+          <tr><td><code>email</code> only</td><td class="yes">accepted</td><td><code>email</code> is the one required claim.</td></tr>
+          <tr><td>no <code>email</code></td><td class="no">rejected</td><td><code>email not found in token</code></td></tr>
+          <tr><td>wrong <code>iss</code> / <code>aud</code></td><td class="yes">accepted</td><td>Neither claim is validated. Don't rely on them.</td></tr>
+          <tr><td>expired <code>exp</code></td><td class="yes">accepted</td><td><b>Not</b> enforced at this endpoint — see Security.</td></tr>
+          <tr><td>signed by a <b>revoked</b> key</td><td class="yes">accepted</td><td><b>Not</b> enforced — see Security.</td></tr>
+          <tr><td>unknown <code>kid</code></td><td class="no">rejected</td><td><code>Invalid key pair</code></td></tr>
+          <tr><td>signed by another key</td><td class="no">rejected</td><td>Signature failure. This is the real check.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>In short: the API resolves your company from <code>kid</code>, verifies the RSA signature, and reads
+      <code>email</code>. Everything else in the token is decoration.</p>
+
+    <details>
+      <summary>Why you may have seen <code>iss</code> and <code>aud</code> in older examples</summary>
+      <div class="body">
+        <p>Earlier guides showed claims like <code>iss: https://app.paulsjob.ai</code> and
+          <code>aud: paul-job-update</code>, and disagreed with each other about the values. Since neither claim
+          is validated, every variant "worked" — which is exactly why the contradiction went unnoticed. They are
+          harmless, but they are not doing anything. This guide omits them.</p>
+      </div>
+    </details>
+
+    <h2 id="security">Security</h2>
+    <ul>
+      <li><strong>The private key never reaches the browser.</strong> Sign on the server, ship only the token.
+        Anyone with the key can impersonate any user in your company.</li>
+      <li><strong>Derive the user from your session</strong>, not from request input.</li>
+      <li><strong>Keep the TTL short.</strong> This example uses five minutes, matching what the Paul's Job API
+        issues for its own widget tokens.</li>
+      <li><strong>Send it with <code>Cache-Control: no-store</code></strong> so no proxy retains it.</li>
+      <li><strong>Rotate</strong> by generating a new key pair and deploying it. Because <code>kid</code>
+        selects the key, both work during a rollover — but read the caveat below before you rely on
+        revoking the old one.</li>
+    </ul>
+
+    <div class="callout warn">
+      <span class="ico">!</span>
+      <div><strong>Two caveats you should know, both verified against the live API.</strong>
+        <p style="margin:.5rem 0 0"><b>1. <code>exp</code> is not checked.</b> A token that expired long ago is
+          still accepted and exchanges for a fresh session. A short TTL is good hygiene, but it is not a control
+          you can lean on.</p>
+        <p style="margin:.5rem 0 0"><b>2. Revoking a key does not stop it.</b> A key pair marked revoked in
+          Chrysus (<code>Active: false</code>, <code>IsRevoked: true</code>) still verifies tokens.</p>
+        <p style="margin:.5rem 0 0">Together these mean: <strong>if your private key leaks, you currently have no
+          in-product way to stop it.</strong> Revocation won't help and waiting for expiry won't either. Guard the
+          key accordingly — server-side only, secret manager, never in git — and escalate to Paul's Job if you
+          suspect exposure. This section will shrink once both are enforced upstream.</p></div>
+    </div>
+
+    <h2 id="trouble">Troubleshooting</h2>
+
+    <details>
+      <summary><code>404</code>s for <code>/chat/…</code> against your own domain</summary>
+      <div class="body"><p>You didn't pass <code>domain</code> in the widget config, so the SDK resolved its
+        iframes against your origin. Add <code>domain: 'https://&lt;slug&gt;.chatbot.app.paulsjob.ai'</code>.</p></div>
+    </details>
+
+    <details>
+      <summary><code>Invalid key pair</code></summary>
+      <div class="body"><p>The <code>kid</code> in your token doesn't match an active key pair for your company.
+        Usually a mixed environment: a key generated in <strong>staging</strong> Chrysus only works with the
+        staging widget domain, and production only with production. Check that <code>SSO_KEY_ID</code> matches
+        the key shown in the Chrysus environment your SDK URL points at, and that it isn't revoked.</p></div>
+    </details>
+
+    <details>
+      <summary><code>unknown company configuration</code></summary>
+      <div class="body"><p>The API couldn't map the request Origin to a company — the same root cause as the 404
+        above. Load the SDK from your own widget domain and pass <code>domain</code>.</p></div>
+    </details>
+
+    <details>
+      <summary><code>Failed to verify signature: crypto/rsa: verification error</code></summary>
+      <div class="body"><p>The token was signed with a different key than the <code>kid</code> advertises. Usually
+        a stale <code>SSO_PRIVATE_KEY</code> after rotation, or mangled newlines — a PEM in an env var normally
+        needs its <code>\n</code> escapes expanded before signing.</p></div>
+    </details>
+
+    <details>
+      <summary><code>email not found in token</code></summary>
+      <div class="body"><p>Your session had no email, so the claim was omitted or empty. It is the one required
+        claim.</p></div>
+    </details>
+
+    <details>
+      <summary><code>Uncaught (in promise) Error: iframeBridge: destroyed</code></summary>
+      <div class="body"><p>Harmless. It appears if you call <code>destroy()</code> while the chat panel is open
+        and mid-request; the in-flight call rejects as the bridge tears down. Teardown still completes.</p></div>
+    </details>
+
+    <h2 id="faq">FAQ</h2>
+    <dl class="faq">
+      <dt>Do our users need a Paul's Job account?</dt>
+      <dd>No. That's the point. The token you sign asserts who they are, and the widget trusts it because
+        it's signed with your company's key.</dd>
+
+      <dt>Can we sign the token in the browser?</dt>
+      <dd>No. That would ship your private key to every visitor, letting anyone log in as anyone. It must be
+        server-side.</dd>
+
+      <dt>What's the difference between <code>employee_mode: true</code> and <code>false</code>?</dt>
+      <dd>It sets whether the user is treated as an <code>employee</code> (your own staff) or a
+        <code>candidate</code> (an external applicant) when the token is verified.</dd>
+
+      <dt>What happens when the token expires?</dt>
+      <dd>The widget re-invokes <code>onStartAutologin</code>, so your callback is asked for a fresh token.
+        Keep the endpoint cheap; it will be called again.</dd>
+
+      <dt>Staging or production?</dt>
+      <dd>They're separate worlds. <code>&lt;slug&gt;.staging.chatbot.app.paulsjob.ai</code> verifies against the
+        staging API, <code>&lt;slug&gt;.chatbot.app.paulsjob.ai</code> against production, and a key pair only
+        works in the environment it was generated in.</dd>
+
+      <dt>How do we rotate the key?</dt>
+      <dd>Generate a new pair in Chrysus and deploy the new <code>SSO_PRIVATE_KEY</code> and
+        <code>SSO_KEY_ID</code> together — <code>kid</code> means both are valid during the rollover, so there's
+        no downtime. Do mark the old one revoked for hygiene, but note that revoking does not currently stop it
+        verifying (see Security), so rotation is not a remedy for a leaked key.</dd>
+    </dl>
+  </main>
+</div>
+
+<script>
+document.querySelectorAll('[data-tabs]').forEach(box => {
+  const btns = box.querySelectorAll('button')
+  const panes = box.querySelectorAll('pre')
+  btns.forEach(b => b.addEventListener('click', () => {
+    btns.forEach(x => x.classList.remove('on'))
+    panes.forEach(x => x.classList.remove('on'))
+    b.classList.add('on')
+    panes[+b.dataset.t].classList.add('on')
+  }))
+})
+
+const root = document.documentElement
+const btn = document.getElementById('theme')
+const sync = () => { btn.textContent = root.classList.contains('dark') ? 'Light' : 'Dark' }
+btn.addEventListener('click', () => {
+  root.classList.toggle('dark')
+  localStorage.setItem('theme', root.classList.contains('dark') ? 'dark' : 'light')
+  sync()
+})
+sync()
+</script>
+</body>
+</html>

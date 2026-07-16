@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Acme Intranet — Paul's Job chat SSO example</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh;
+    font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
+    display: grid; place-items: center;
+    background: #f4f5f7; color: #16181d;
+  }
+  @media (prefers-color-scheme: dark) { body { background: #14161a; color: #e8eaed; } }
+  .card {
+    width: min(30rem, calc(100vw - 2rem));
+    background: #fff; border-radius: 14px; padding: 2rem;
+    box-shadow: 0 1px 3px rgb(0 0 0 / .1), 0 8px 24px rgb(0 0 0 / .06);
+  }
+  @media (prefers-color-scheme: dark) { .card { background: #1e2127; box-shadow: none; border: 1px solid #2c313a; } }
+  h1 { margin: 0 0 .25rem; font-size: 1.3rem; }
+  .sub { margin: 0 0 1.5rem; opacity: .65; font-size: .9rem; }
+  label { display: block; font-size: .85rem; font-weight: 600; margin-bottom: .35rem; }
+  input {
+    width: 100%; padding: .7rem .8rem; font: inherit; border-radius: 8px;
+    border: 1px solid #ccd0d8; background: #fff; color: inherit;
+  }
+  @media (prefers-color-scheme: dark) { input { background: #171a1f; border-color: #333945; } }
+  button {
+    width: 100%; margin-top: 1rem; padding: .7rem 1rem; font: inherit; font-weight: 600;
+    border: 0; border-radius: 8px; background: #3d5a3d; color: #fff; cursor: pointer;
+  }
+  button.secondary { background: transparent; color: inherit; border: 1px solid #ccd0d8; }
+  @media (prefers-color-scheme: dark) { button.secondary { border-color: #333945; } }
+  button:disabled { opacity: .6; cursor: progress; }
+  .row { display: flex; align-items: center; gap: .75rem; margin-bottom: 1.25rem; }
+  .avatar {
+    width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center;
+    background: #3d5a3d; color: #fff; font-weight: 700; flex: none;
+  }
+  .who { font-weight: 600; } .who + div { font-size: .85rem; opacity: .65; }
+  .status {
+    margin-top: 1.25rem; padding: .7rem .8rem; border-radius: 8px; font-size: .85rem;
+    background: #eef1f4; white-space: pre-wrap;
+  }
+  @media (prefers-color-scheme: dark) { .status { background: #171a1f; } }
+  .status.err { background: #fdecec; color: #8a1c1c; }
+  @media (prefers-color-scheme: dark) { .status.err { background: #2c1618; color: #f3b0b0; } }
+  [hidden] { display: none !important; }
+  .users { display: grid; gap: .5rem; }
+  .users button {
+    margin: 0; display: flex; align-items: center; gap: .75rem; text-align: left;
+    background: transparent; color: inherit; border: 1px solid #ccd0d8; padding: .6rem .7rem;
+  }
+  .users button:hover { border-color: #3d5a3d; }
+  @media (prefers-color-scheme: dark) { .users button { border-color: #333945; } }
+  .users .avatar { width: 34px; height: 34px; font-size: .85rem; }
+  .users .who { font-weight: 600; font-size: .9rem; }
+  .users .role { font-size: .78rem; opacity: .6; font-weight: 400; }
+  .note { margin-top: 1rem; font-size: .78rem; opacity: .55; }
+  .env {
+    display: inline-block; margin-bottom: .75rem; padding: .15rem .5rem; border-radius: 999px;
+    font-size: .7rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+    background: #fde8c8; color: #8a5a00;
+  }
+  @media (prefers-color-scheme: dark) { .env { background: #3a2c10; color: #f0c070; } }
+</style>
+</head>
+<body>
+<main class="card">
+  <!-- Fake login. Stands in for whatever auth your site already has. -->
+  <div id="login">
+    <h1>Acme Intranet</h1>
+    <p class="sub">Pick a demo employee to sign in as. Stands in for your real login.</p>
+    <div id="users" class="users">Loading…</div>
+    <div class="note">Demo identities are fixed on the server — this page is public and signs real tokens.</div>
+  </div>
+
+  <!-- Signed-in state. The widget auto-logs-in from here. -->
+  <div id="app" hidden>
+    <div class="row">
+      <div class="avatar" id="initial">D</div>
+      <div>
+        <div class="who" id="name">—</div>
+        <div id="mail">—</div>
+      </div>
+    </div>
+    <h1>You're signed in</h1>
+    <p class="sub">The Paul's Job chat widget should now be logged in as you — open it from the launcher.</p>
+    <button class="secondary" id="logout">Sign out</button>
+    <div class="status" id="status">Starting widget…</div>
+  </div>
+</main>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// The whole integration is below. Three moving parts:
+//   1. fetch a token from YOUR backend  (the private key stays there)
+//   2. hand it to the widget via verifyToken()
+//   3. tear it down on logout with clearToken() + destroy()
+// ─────────────────────────────────────────────────────────────────────────────
+
+const $ = id => document.getElementById(id)
+const say = (msg, isError = false) => {
+  $('status').textContent = msg
+  $('status').classList.toggle('err', isError)
+}
+
+/**
+ * Ask our own backend to mint an SSO token for the logged-in user, then hand it
+ * to the widget. The browser never sees the private key — only this short-lived token.
+ *
+ * This is `onStartAutologin`. The SDK awaits it in THIS frame (it is not sent across
+ * the iframe boundary), so an async function is correct here.
+ */
+async function autologin() {
+  const res = await fetch('/sso-token', { method: 'POST' })
+  if (!res.ok) throw new Error(`token endpoint returned ${res.status}`)
+  const { token } = await res.json()
+  await window.HyrdWidget.verifyToken(token)
+}
+
+function startWidget({ company, sdkUrl, domain, employeeMode }) {
+  const config = {
+    company,
+    // REQUIRED when embedding on your own site. The widget opens iframes at
+    // `<domain>/chat/...`; without this it looks for them on YOUR origin and 404s,
+    // and the backend sees your site's Origin, which it can't map to a company.
+    domain,
+    employee_mode: employeeMode,
+    onStartAutologin: async () => {
+      try {
+        await autologin()
+        say('Widget logged in. Open the launcher to chat.')
+      } catch (err) {
+        say(`Auto-login failed: ${err.message}`, true)
+      }
+    },
+  }
+
+  // If the SDK script hasn't loaded yet, it drains `readyQueue` on load.
+  // If it has, call startWidget() directly. This is the documented handshake.
+  if (!window.HyrdWidget) {
+    window.HyrdWidget = { readyQueue: [config] }
+  } else {
+    window.HyrdWidget.startWidget(config)
+    return
+  }
+
+  if (!document.getElementById('paulsjob-widget-sdk')) {
+    const s = document.createElement('script')
+    s.id = 'paulsjob-widget-sdk'
+    s.src = sdkUrl              // your own tenant domain — see .env.example
+    s.async = true
+    s.onerror = () => say(`Could not load the widget SDK from ${sdkUrl}`, true)
+    document.body.appendChild(s)
+  }
+}
+
+async function showSignedIn(user) {
+  $('login').hidden = true
+  $('app').hidden = false
+  $('name').textContent = user.name || user.email
+  $('mail').textContent = user.email
+  $('initial').textContent = (user.name || user.email)[0].toUpperCase()
+
+  const config = await (await fetch('/config')).json()
+  if (config.env) {
+    const tag = document.createElement('div')
+    tag.className = 'env'
+    tag.textContent = `${config.env} demo`
+    $('app').prepend(tag)
+  }
+  startWidget(config)
+}
+
+async function login(id, btn) {
+  btn.disabled = true
+  try {
+    // an id from the server's fixed list, never an email
+    const res = await fetch(`/login/${encodeURIComponent(id)}`, { method: 'POST' })
+    if (!res.ok) throw new Error('login failed')
+    await showSignedIn(await res.json())
+  } finally {
+    btn.disabled = false
+  }
+}
+
+async function renderUsers() {
+  const users = await (await fetch('/demo-users')).json()
+  const box = $('users')
+  box.textContent = ''
+  for (const u of users) {
+    const b = document.createElement('button')
+    b.innerHTML = `<span class="avatar">${u.name[0]}</span>
+      <span><span class="who">${u.name}</span><br><span class="role">${u.title}</span></span>`
+    b.addEventListener('click', () => login(u.id, b))
+    box.appendChild(b)
+  }
+}
+
+$('logout').addEventListener('click', async () => {
+  // Order matters: drop the widget's stored token, THEN tear down the iframes.
+  // Skipping clearToken() leaves the next visitor logged in as you.
+  await window.HyrdWidget?.clearToken?.()
+  window.HyrdWidget?.destroy?.()
+  await fetch('/logout', { method: 'POST' })
+  location.reload()
+})
+
+// Already signed in? (cookie survives reload) Otherwise offer the picker.
+fetch('/me').then(r => (r.ok ? r.json().then(showSignedIn) : renderUsers()))
+</script>
+</body>
+</html>

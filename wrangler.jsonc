@@ -13,12 +13,14 @@
   // See iconv-lite-stub.mjs.
   "alias": { "iconv-lite": "./iconv-lite-stub.mjs" },
   "observability": { "enabled": true },
-  // Secrets are NOT here. Set them once with:
-  //   wrangler secret put SSO_PRIVATE_KEY
-  //   wrangler secret put SSO_KEY_ID
-  "vars": {
-    "COMPANY_SLUG": "paul-s-job-staging",
-    "WIDGET_SDK_URL": "https://paul-s-job-staging.staging.chatbot.app.paulsjob.ai/sdk.iife.js",
-    "EMPLOYEE_MODE": "true"
-  }
+  // Nothing tenant-specific is committed here — no company slug, no key.
+  // The hosted demo's values live in Cloudflare and are set once, out of band:
+  //
+  //   wrangler secret put SSO_PRIVATE_KEY     # the signing key
+  //   wrangler secret put SSO_KEY_ID          # its kid
+  //   # COMPANY_SLUG / WIDGET_SDK_URL / EMPLOYEE_MODE: set as vars in the dashboard
+  //
+  // keep_vars stops each deploy from wiping the dashboard vars. If you deploy your
+  // own copy and set none of these, server.js throws at boot naming the missing one.
+  "keep_vars": true
 }

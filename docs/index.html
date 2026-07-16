@@ -218,7 +218,7 @@
         <b>TL;DR</b> — When someone logs into your site, your <em>backend</em> signs a short-lived RS256 JWT
         with your company's SSO private key. Your page hands that token to the widget via
         <code>verifyToken()</code>, and the user is logged in — no second sign-in. The private key never
-        reaches the browser. You need three values from Chrysus: a <strong>private key</strong>, its
+        reaches the browser. You need three values from your company settings: a <strong>private key</strong>, its
         <strong>key ID</strong> (<code>kid</code>), and your <strong>company slug</strong>.
       </div>
     </header>
@@ -279,11 +279,11 @@
         can log in as anyone in your company. Treat it like a database password.</div>
     </div>
 
-    <div class="step" id="s1"><span class="n">1</span><h2>Generate a key pair in Chrysus</h2></div>
+    <div class="step" id="s1"><span class="n">1</span><h2>Generate a key pair</h2></div>
     <p>In your Paul's Job dashboard go to <strong>Settings → Developer &amp; Security → SSO Key Management</strong>.</p>
 
     <figure>
-      <img src="images/04-chrysus-sso-keys.png" alt="Chrysus SSO Key Management, listing existing key pairs with their key ID and status">
+      <img src="images/04-chrysus-sso-keys.png" alt="SSO Key Management, listing existing key pairs with their key ID and status">
       <figcaption>Settings → Developer &amp; Security → SSO Key Management. Each key shows its algorithm, size and creation date.</figcaption>
     </figure>
 
@@ -483,9 +483,9 @@ window.HyrdWidget.<span class="hl">destroy</span>()</pre>
     <details>
       <summary><code>Invalid key pair</code></summary>
       <div class="body"><p>The <code>kid</code> in your token doesn't match an active key pair for your company.
-        Usually a mixed environment: a key generated in <strong>staging</strong> Chrysus only works with the
+        Usually a mixed environment: a key generated in your <strong>staging</strong> company settings only works with the
         staging widget domain, and production only with production. Check that <code>SSO_KEY_ID</code> matches
-        the key shown in the Chrysus environment your SDK URL points at, and that it isn't revoked.</p></div>
+        the key shown in the environment your SDK URL points at, and that it isn't revoked.</p></div>
     </details>
 
     <details>
@@ -537,9 +537,9 @@ window.HyrdWidget.<span class="hl">destroy</span>()</pre>
         works in the environment it was generated in.</dd>
 
       <dt>How do we rotate the key?</dt>
-      <dd>Generate a new pair in Chrysus and deploy the new <code>SSO_PRIVATE_KEY</code> and
+      <dd>Generate a new pair in your company settings and deploy the new <code>SSO_PRIVATE_KEY</code> and
         <code>SSO_KEY_ID</code> together — <code>kid</code> means both are valid during the rollover, so there's
-        no downtime. Then revoke the old one in Chrysus.</dd>
+        no downtime. Then revoke the old one.</dd>
     </dl>
   </main>
 </div>

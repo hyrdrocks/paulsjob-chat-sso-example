@@ -82,7 +82,5 @@ Never commit `SSO_PRIVATE_KEY`, `SSO_KEY_ID`, or your company slug. Use `.env` (
 your secret manager. Sign tokens **only** for the user in your own server-side session — an
 endpoint that signs any posted email lets any visitor log in as anyone.
 
-Two things the verify endpoint does **not** currently enforce, both verified against the live
-API: expired tokens are still accepted, and **revoked key pairs still verify**. So if your
-private key leaks there is no in-product way to stop it — guard it accordingly. Details in
+If you suspect your private key has been exposed, contact Paul's Job and rotate it. More in
 [the guide](https://hyrdrocks.github.io/paulsjob-chat-sso-example/#security).

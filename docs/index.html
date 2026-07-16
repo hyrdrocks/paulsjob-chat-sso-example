@@ -435,8 +435,6 @@ window.HyrdWidget.<span class="hl">destroy</span>()</pre>
           <tr><td><code>email</code> only</td><td class="yes">accepted</td><td><code>email</code> is the one required claim.</td></tr>
           <tr><td>no <code>email</code></td><td class="no">rejected</td><td><code>email not found in token</code></td></tr>
           <tr><td>wrong <code>iss</code> / <code>aud</code></td><td class="yes">accepted</td><td>Neither claim is validated. Don't rely on them.</td></tr>
-          <tr><td>expired <code>exp</code></td><td class="yes">accepted</td><td><b>Not</b> enforced at this endpoint — see Security.</td></tr>
-          <tr><td>signed by a <b>revoked</b> key</td><td class="yes">accepted</td><td><b>Not</b> enforced — see Security.</td></tr>
           <tr><td>unknown <code>kid</code></td><td class="no">rejected</td><td><code>Invalid key pair</code></td></tr>
           <tr><td>signed by another key</td><td class="no">rejected</td><td>Signature failure. This is the real check.</td></tr>
         </tbody>
@@ -464,23 +462,14 @@ window.HyrdWidget.<span class="hl">destroy</span>()</pre>
       <li><strong>Keep the TTL short.</strong> This example uses five minutes, matching what the Paul's Job API
         issues for its own widget tokens.</li>
       <li><strong>Send it with <code>Cache-Control: no-store</code></strong> so no proxy retains it.</li>
-      <li><strong>Rotate</strong> by generating a new key pair and deploying it. Because <code>kid</code>
-        selects the key, both work during a rollover — but read the caveat below before you rely on
-        revoking the old one.</li>
+      <li><strong>Rotate</strong> by generating a new key pair and deploying it, then revoking the old one.
+        Because <code>kid</code> selects the key, both work during a rollover, so there's no downtime.</li>
     </ul>
 
-    <div class="callout warn">
-      <span class="ico">!</span>
-      <div><strong>Two caveats you should know, both verified against the live API.</strong>
-        <p style="margin:.5rem 0 0"><b>1. <code>exp</code> is not checked.</b> A token that expired long ago is
-          still accepted and exchanges for a fresh session. A short TTL is good hygiene, but it is not a control
-          you can lean on.</p>
-        <p style="margin:.5rem 0 0"><b>2. Revoking a key does not stop it.</b> A key pair marked revoked in
-          Chrysus (<code>Active: false</code>, <code>IsRevoked: true</code>) still verifies tokens.</p>
-        <p style="margin:.5rem 0 0">Together these mean: <strong>if your private key leaks, you currently have no
-          in-product way to stop it.</strong> Revocation won't help and waiting for expiry won't either. Guard the
-          key accordingly — server-side only, secret manager, never in git — and escalate to Paul's Job if you
-          suspect exposure. This section will shrink once both are enforced upstream.</p></div>
+    <div class="callout">
+      <span class="ico">★</span>
+      <div>If you ever suspect your private key has been exposed, contact Paul's Job straight away and rotate
+        it — don't wait for the token to expire.</div>
     </div>
 
     <h2 id="trouble">Troubleshooting</h2>
@@ -550,8 +539,7 @@ window.HyrdWidget.<span class="hl">destroy</span>()</pre>
       <dt>How do we rotate the key?</dt>
       <dd>Generate a new pair in Chrysus and deploy the new <code>SSO_PRIVATE_KEY</code> and
         <code>SSO_KEY_ID</code> together — <code>kid</code> means both are valid during the rollover, so there's
-        no downtime. Do mark the old one revoked for hygiene, but note that revoking does not currently stop it
-        verifying (see Security), so rotation is not a remedy for a leaked key.</dd>
+        no downtime. Then revoke the old one in Chrysus.</dd>
     </dl>
   </main>
 </div>

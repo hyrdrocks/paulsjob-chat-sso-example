@@ -18,6 +18,7 @@ async function main() {
   assert.strictEqual(header.alg, 'RS256', 'must be RS256')
   assert.strictEqual(header.kid, process.env.SSO_KEY_ID, 'kid must match SSO_KEY_ID — the API finds your key by it')
   assert.strictEqual(claims.email, 'check@example.com', 'email is the one claim the API requires')
+  assert.strictEqual(claims.aud, process.env.SSO_AUDIENCE || 'paulsjob-widget', 'aud must scope the token to the widget')
   assert.strictEqual(claims.exp - claims.iat, 300, 'TTL should be 5 minutes')
 
   // ── the signature actually verifies against our own public key ──

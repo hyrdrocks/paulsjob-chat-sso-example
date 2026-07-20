@@ -62,11 +62,12 @@ doesn't need the picker — see `getCurrentUser()`.
 
 ## How it works, in one paragraph
 
-Your backend signs a short-lived JWT saying "this is alice@acme.com", using your company's
-SSO private key. Your page passes it to `window.HyrdWidget.verifyToken(token)`. The Paul's Job
-API finds your company's public key using the token's `kid`, checks the signature, and starts a
-widget session. **The private key never reaches the browser** — that is the entire security
-model. Full detail, including exactly which claims are checked, is in
+Your backend signs a short-lived JWT saying "this is alice@acme.com", scoped to the widget with
+an `aud` claim, using your company's SSO private key. Your page passes it to
+`window.HyrdWidget.verifyToken(token)`. The Paul's Job API finds your company's public key using
+the token's `kid`, checks the signature, verifies the audience, and starts a widget session.
+**The private key never reaches the browser** — that is the entire security model. Full detail,
+including exactly which claims are checked, is in
 [the guide](https://hyrdrocks.github.io/paulsjob-chat-sso-example/).
 
 ## Two things that catch people out

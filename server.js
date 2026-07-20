@@ -28,6 +28,11 @@ const {
   COMPANY_SLUG,
   WIDGET_SDK_URL,
   EMPLOYEE_MODE = 'true',
+  // Who the token is FOR. The API validates this (`aud`) when configured, so a
+  // token minted for the widget can't be replayed against a different service
+  // that happens to share your key pair. Keep it aligned with what Paul's Job
+  // expects for widget SSO; the default below is that value.
+  SSO_AUDIENCE = 'paulsjob-widget',
   PORT = 3000,
 } = process.env
 
@@ -52,14 +57,15 @@ const TOKEN_TTL_SECONDS = 5 * 60
 /**
  * Sign an SSO token for one user.
  *
- * `email` is the only claim the API requires — it identifies the user inside the
- * widget. `name` is optional and only affects display. Anything else you add is
- * ignored by the verifier, so don't rely on it for access control.
+ * `email` identifies the user inside the widget; `name` is optional and only
+ * affects display. `aud` scopes the token to the Paul's Job widget — the API
+ * checks it as defense-in-depth, so don't point it at anything else. Any other
+ * claim you add is ignored by the verifier; don't rely on it for access control.
  */
 function signSsoToken({ email, name }) {
   const now = Math.floor(Date.now() / 1000)
   return jwt.sign(
-    { email, name, iat: now, exp: now + TOKEN_TTL_SECONDS },
+    { email, name, aud: SSO_AUDIENCE, iat: now, exp: now + TOKEN_TTL_SECONDS },
     privateKey,
     { algorithm: 'RS256', keyid: SSO_KEY_ID },
   )

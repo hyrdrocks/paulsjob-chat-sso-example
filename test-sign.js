@@ -4,7 +4,7 @@
 // derived from your own private key, then verifies it against the live API.
 const assert = require('node:assert')
 const { createPublicKey, createVerify } = require('node:crypto')
-const { signSsoToken } = require('./server')
+const { signSsoToken, SSO_AUDIENCE } = require('./server')
 
 const decode = s => JSON.parse(Buffer.from(s, 'base64url').toString())
 
@@ -18,7 +18,7 @@ async function main() {
   assert.strictEqual(header.alg, 'RS256', 'must be RS256')
   assert.strictEqual(header.kid, process.env.SSO_KEY_ID, 'kid must match SSO_KEY_ID — the API finds your key by it')
   assert.strictEqual(claims.email, 'check@example.com', 'email is the one claim the API requires')
-  assert.strictEqual(claims.aud, process.env.SSO_AUDIENCE || 'paulsjob-widget', 'aud must scope the token to the widget')
+  assert.strictEqual(claims.aud, SSO_AUDIENCE, 'aud must scope the token to the widget')
   assert.strictEqual(claims.exp - claims.iat, 300, 'TTL should be 5 minutes')
 
   // ── the signature actually verifies against our own public key ──

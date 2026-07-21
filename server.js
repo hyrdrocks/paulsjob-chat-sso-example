@@ -164,4 +164,4 @@ if (require.main === module) {
   })
 }
 
-module.exports = { app, signSsoToken }
+module.exports = { app, signSsoToken, SSO_AUDIENCE }

@@ -319,7 +319,7 @@ const TOKEN_TTL_SECONDS = 5 * 60   <span class="cm">// short: this is a credenti
 function signSsoToken({ email, name }) {
   const now = Math.floor(Date.now() / 1000)
   return jwt.sign(
-    { email, name, iat: now, exp: now + TOKEN_TTL_SECONDS },
+    { email, name, aud: <span class="hl">'paulsjob-widget'</span>, iat: now, exp: now + TOKEN_TTL_SECONDS },
     process.env.SSO_PRIVATE_KEY.replace(/\\n/g, '\n'),
     { algorithm: <span class="hl">'RS256'</span>, keyid: <span class="hl">process.env.SSO_KEY_ID</span> },
   )
@@ -342,10 +342,11 @@ EMPLOYEE_MODE="true"</pre>
 <pre><span class="cm">// header</span>
 { "alg": "RS256", "typ": "JWT", "kid": <span class="hl">"20260101-a1b2"</span> }
 
-<span class="cm">// payload — `email` is the only claim the API requires</span>
+<span class="cm">// payload — `email` identifies the user; `aud` scopes the token to the widget</span>
 {
   "email": <span class="hl">"demo.user@example.com"</span>,
   "name":  "Demo User",
+  "aud":   <span class="hl">"paulsjob-widget"</span>,
   "iat":   1784196450,
   "exp":   1784196750
 }</pre>
@@ -431,26 +432,29 @@ window.HyrdWidget.<span class="hl">destroy</span>()</pre>
       <table>
         <thead><tr><th>Token</th><th>Result</th><th>Meaning</th></tr></thead>
         <tbody>
-          <tr><td><code>email</code> + <code>exp</code> + <code>iat</code></td><td class="yes">accepted</td><td>The normal case.</td></tr>
-          <tr><td><code>email</code> only</td><td class="yes">accepted</td><td><code>email</code> is the one required claim.</td></tr>
+          <tr><td><code>email</code> + <code>aud</code> + <code>exp</code> + <code>iat</code></td><td class="yes">accepted</td><td>The normal case.</td></tr>
           <tr><td>no <code>email</code></td><td class="no">rejected</td><td><code>email not found in token</code></td></tr>
-          <tr><td>wrong <code>iss</code> / <code>aud</code></td><td class="yes">accepted</td><td>Neither claim is validated. Don't rely on them.</td></tr>
+          <tr><td>wrong <code>aud</code></td><td class="no">rejected</td><td><code>Audience validation failed</code>. The API checks it as defense-in-depth.</td></tr>
+          <tr><td>wrong <code>iss</code></td><td class="yes">accepted</td><td><code>iss</code> is not validated. Don't rely on it.</td></tr>
           <tr><td>unknown <code>kid</code></td><td class="no">rejected</td><td><code>Invalid key pair</code></td></tr>
           <tr><td>signed by another key</td><td class="no">rejected</td><td>Signature failure. This is the real check.</td></tr>
         </tbody>
       </table>
     </div>
 
-    <p>In short: the API resolves your company from <code>kid</code>, verifies the RSA signature, and reads
-      <code>email</code>. Everything else in the token is decoration.</p>
+    <p>In short: the API resolves your company from <code>kid</code>, verifies the RSA signature, reads
+      <code>email</code>, and checks that <code>aud</code> is meant for the widget. <code>iss</code> and any
+      other claim are decoration.</p>
 
     <details>
-      <summary>Why you may have seen <code>iss</code> and <code>aud</code> in older examples</summary>
+      <summary>Why <code>aud</code> matters, and why <code>iss</code> doesn't</summary>
       <div class="body">
-        <p>Earlier guides showed claims like <code>iss: https://app.paulsjob.ai</code> and
-          <code>aud: paul-job-update</code>, and disagreed with each other about the values. Since neither claim
-          is validated, every variant "worked" — which is exactly why the contradiction went unnoticed. They are
-          harmless, but they are not doing anything. This guide omits them.</p>
+        <p><code>aud</code> (audience) names who the token is <em>for</em>. Scoping it to the widget means a token
+          minted for chat SSO can't be replayed against some other service that happens to share your key pair —
+          a cheap layer of defense-in-depth on top of the signature. Set it to <code>paulsjob-widget</code> (or
+          whatever value Paul's Job gives you); the API rejects a token whose <code>aud</code> is present but wrong.</p>
+        <p>Earlier guides also showed an <code>iss</code> claim and disagreed about its value. <code>iss</code> is
+          not validated, so it does nothing — this guide omits it.</p>
       </div>
     </details>
 
@@ -461,6 +465,8 @@ window.HyrdWidget.<span class="hl">destroy</span>()</pre>
       <li><strong>Derive the user from your session</strong>, not from request input.</li>
       <li><strong>Keep the TTL short.</strong> This example uses five minutes, matching what the Paul's Job API
         issues for its own widget tokens.</li>
+      <li><strong>Scope the token with <code>aud</code>.</strong> Setting the audience to the widget lets the API
+        reject a token replayed against a different service, even one sharing your key pair.</li>
       <li><strong>Send it with <code>Cache-Control: no-store</code></strong> so no proxy retains it.</li>
       <li><strong>Rotate</strong> by generating a new key pair and deploying it, then revoking the old one.
         Because <code>kid</code> selects the key, both work during a rollover, so there's no downtime.</li>

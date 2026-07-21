@@ -319,7 +319,7 @@ const TOKEN_TTL_SECONDS = 5 * 60   <span class="cm">// short: this is a credenti
 function signSsoToken({ email, name }) {
   const now = Math.floor(Date.now() / 1000)
   return jwt.sign(
-    { email, name, aud: <span class="hl">'paulsjob-widget'</span>, iat: now, exp: now + TOKEN_TTL_SECONDS },
+    { email, name, aud: <span class="hl">process.env.SSO_AUDIENCE || 'paulsjob-widget'</span>, iat: now, exp: now + TOKEN_TTL_SECONDS },
     process.env.SSO_PRIVATE_KEY.replace(/\\n/g, '\n'),
     { algorithm: <span class="hl">'RS256'</span>, keyid: <span class="hl">process.env.SSO_KEY_ID</span> },
   )

@@ -1,0 +1,937 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paul's Job chat widget — layout &amp; trigger integration guide</title>
+<script>
+  // Apply theme before first paint so there's no flash.
+  (() => {
+    const saved = localStorage.getItem('theme')
+    const dark = saved ? saved === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches
+    if (dark) document.documentElement.classList.add('dark')
+  })()
+</script>
+<style>
+  :root {
+    --ivory:   #FAF9F5;
+    --paper:   #FFFFFF;
+    --slate:   #141413;
+    --clay:    #D97757;
+    --oat:     #E3DACC;
+    --oat-bg:  rgba(227,218,204,0.35);
+    --olive:   #788C5D;
+    --rose:    #B4453C;
+    --rose-bg: rgba(180,69,60,0.08);
+    --gray-150:#F0EEE6;
+    --gray-300:#D1CFC5;
+    --gray-500:#87867F;
+    --gray-700:#3D3D3A;
+    --serif: ui-serif, Georgia, "Times New Roman", serif;
+    --sans:  system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono:  ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  html.dark {
+    --ivory:   #16171A;
+    --paper:   #1C1E22;
+    --slate:   #F2F0EA;
+    --clay:    #E0906E;
+    --oat:     #3A3730;
+    --oat-bg:  rgba(58,55,48,0.5);
+    --olive:   #9DB37E;
+    --rose:    #E88A82;
+    --rose-bg: rgba(232,138,130,0.10);
+    --gray-150:#23262B;
+    --gray-300:#343941;
+    --gray-500:#8B8F98;
+    --gray-700:#C9CCD2;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--ivory);
+    color: var(--gray-700);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+    padding: 56px 24px 120px;
+  }
+  .page { max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: 210px minmax(0,1fr); gap: 48px; }
+  @media (max-width: 920px) { .page { grid-template-columns: 1fr; } nav.toc { display: none; } }
+
+  /* ── nav ── */
+  nav.toc { position: sticky; top: 32px; align-self: start; font-size: 13px; }
+  nav.toc .label {
+    font-family: var(--mono); font-size: 10px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--gray-500); margin-bottom: 12px;
+  }
+  nav.toc a {
+    display: block; padding: 5px 0 5px 12px; border-left: 2px solid var(--gray-300);
+    color: var(--gray-700); text-decoration: none;
+  }
+  nav.toc a:hover { color: var(--slate); border-color: var(--clay); }
+  nav.toc .files { margin-top: 28px; border-top: 1px solid var(--gray-300); padding-top: 16px; }
+  nav.toc .files code { display: block; font-family: var(--mono); font-size: 11px; color: var(--gray-500); padding: 3px 0; }
+
+  /* ── theme toggle ── */
+  .theme {
+    position: fixed; top: 18px; right: 18px; z-index: 10;
+    font-family: var(--mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+    background: var(--paper); color: var(--gray-500);
+    border: 1.5px solid var(--gray-300); border-radius: 8px;
+    padding: 7px 11px; cursor: pointer;
+  }
+  .theme:hover { color: var(--slate); border-color: var(--clay); }
+
+  /* ── header ── */
+  .eyebrow {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--gray-500); margin-bottom: 10px;
+  }
+  h1 { font-family: var(--serif); font-weight: 500; font-size: 32px; color: var(--slate); letter-spacing: -.01em; margin-bottom: 14px; }
+  .tldr {
+    border: 1.5px solid var(--gray-300); border-left: 3px solid var(--clay);
+    border-radius: 10px; background: var(--paper); padding: 16px 18px; margin-bottom: 8px;
+  }
+  .tldr b { color: var(--slate); }
+  h2 { font-family: var(--serif); font-weight: 500; font-size: 22px; color: var(--slate); margin: 44px 0 14px; scroll-margin-top: 24px; }
+  h3 { font-family: var(--serif); font-weight: 500; font-size: 17px; color: var(--slate); margin: 24px 0 8px; }
+  p { margin-bottom: 12px; max-width: 720px; }
+  a { color: var(--clay); }
+  code { font-family: var(--mono); font-size: 13px; }
+  p code, li code, td code, dd code { background: var(--gray-150); padding: 1px 5px; border-radius: 4px; }
+  ul, ol { padding-left: 20px; max-width: 720px; margin-bottom: 12px; }
+  li { margin-bottom: 7px; }
+  strong { color: var(--slate); }
+
+  /* ── steps ── */
+  .step { display: flex; gap: 14px; align-items: baseline; margin: 40px 0 12px; scroll-margin-top: 24px; }
+  .step .n {
+    font-family: var(--mono); font-size: 11px; color: var(--paper); background: var(--clay);
+    width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; flex: none;
+    transform: translateY(3px);
+  }
+  .step h2 { margin: 0; }
+
+  /* ── code ── */
+  pre {
+    background: var(--paper); border: 1.5px solid var(--gray-300); border-radius: 10px;
+    padding: 16px 18px; font-family: var(--mono); font-size: 12.5px; line-height: 1.6;
+    color: var(--slate); overflow-x: auto; margin: 14px 0;
+  }
+  pre .cm { color: var(--gray-500); }
+  pre .hl { color: var(--clay); }
+  pre .ok { color: var(--olive); }
+  pre .bad { color: var(--rose); }
+
+  /* ── tabs ── */
+  .tabs { border: 1.5px solid var(--gray-300); border-radius: 10px; background: var(--paper); margin: 16px 0; overflow: hidden; }
+  .tabbar { display: flex; border-bottom: 1px solid var(--gray-300); background: var(--gray-150); }
+  .tabbar button {
+    appearance: none; border: none; background: none; font-family: var(--mono); font-size: 12px;
+    color: var(--gray-500); padding: 10px 16px; cursor: pointer; border-right: 1px solid var(--gray-300);
+  }
+  .tabbar button.on { background: var(--paper); color: var(--slate); border-bottom: 2px solid var(--clay); margin-bottom: -1px; }
+  .tabs pre { display: none; margin: 0; border: 0; border-radius: 0; }
+  .tabs pre.on { display: block; }
+
+  /* ── callouts ── */
+  .callout { display: flex; gap: 12px; border: 1.5px solid var(--oat); background: var(--oat-bg); border-radius: 10px; padding: 14px 16px; margin: 18px 0; font-size: 14px; }
+  .callout .ico { color: var(--clay); font-weight: 600; flex: none; }
+  .callout.warn { border-color: var(--rose); background: var(--rose-bg); }
+  .callout.warn .ico { color: var(--rose); }
+
+  /* ── table ── */
+  .twrap { overflow-x: auto; margin: 16px 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; background: var(--paper); border: 1.5px solid var(--gray-300); border-radius: 10px; overflow: hidden; }
+  th, td { text-align: left; padding: 9px 13px; border-bottom: 1px solid var(--gray-300); vertical-align: top; }
+  th { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--gray-500); background: var(--gray-150); font-weight: 500; }
+  tr:last-child td { border-bottom: 0; }
+  .yes { color: var(--olive); font-weight: 600; }
+  .no  { color: var(--rose);  font-weight: 600; }
+  .none { font-family: var(--mono); font-size: 12px; color: var(--rose); font-weight: 600; }
+
+  /* ── figure ── */
+  figure { margin: 18px 0; }
+  figure img { width: 100%; border: 1.5px solid var(--gray-300); border-radius: 10px; display: block; }
+  figcaption { font-size: 12.5px; color: var(--gray-500); margin-top: 7px; }
+
+  /* ── diagram ── */
+  .flow { background: var(--paper); border: 1.5px solid var(--gray-300); border-radius: 10px; padding: 18px; margin: 16px 0; overflow-x: auto; }
+  .flow svg { display: block; min-width: 620px; width: 100%; height: auto; }
+  .flow .box { fill: var(--gray-150); stroke: var(--gray-300); }
+  .flow .box-hl { fill: var(--oat-bg); stroke: var(--clay); }
+  .flow .lbl { fill: var(--slate); font: 600 12px var(--sans); }
+  .flow .sub { fill: var(--gray-500); font: 10.5px var(--mono); }
+  .flow .arw { stroke: var(--gray-500); stroke-width: 1.4; fill: none; }
+  .flow .arwlbl { fill: var(--gray-500); font: 10.5px var(--mono); }
+
+  /* ── faq ── */
+  dl.faq dt { font-family: var(--serif); font-size: 16px; color: var(--slate); margin-top: 20px; }
+  dl.faq dd { font-size: 14px; margin: 4px 0 0; max-width: 700px; }
+
+  details { border: 1.5px solid var(--gray-300); border-radius: 10px; background: var(--paper); margin: 12px 0; overflow: hidden; }
+  summary { list-style: none; cursor: pointer; padding: 13px 16px; font-family: var(--serif); font-size: 15.5px; color: var(--slate); display: flex; align-items: baseline; gap: 10px; }
+  summary::-webkit-details-marker { display: none; }
+  summary::before { content: "▸"; color: var(--clay); font-family: var(--sans); font-size: 12px; transition: transform 120ms; }
+  details[open] summary::before { transform: rotate(90deg); }
+  details .body { padding: 0 16px 14px; }
+  details .body p:last-child { margin-bottom: 0; }
+
+  @media print {
+    body { padding: 0; background: #fff; }
+    .page { grid-template-columns: 1fr; }
+    nav.toc, .theme { display: none; }
+    h2 { break-after: avoid; }
+    pre, table, figure, .callout { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<button class="theme" id="theme">Dark</button>
+<div class="page">
+
+  <nav class="toc">
+    <div class="label">On this page</div>
+    <a href="#tldr">TL;DR</a>
+    <a href="#modes">The three modes</a>
+    <a href="#knobs">The knob table</a>
+    <a href="#precedence">Which spelling wins</a>
+    <a href="#api">The imperative API</a>
+    <a href="#anchor">The container-anchor contract</a>
+    <a href="#failsafe">The two CSS rules</a>
+    <a href="#viewport">The viewport anchor</a>
+    <a href="#mobile">Mobile</a>
+    <a href="#chrome">Edge &amp; close button</a>
+    <a href="#floating">Moving the floating pill</a>
+    <a href="#console">What the console tells you</a>
+    <a href="#worked">Worked example</a>
+    <a href="#limits">Limits &amp; caveats</a>
+    <a href="#faq">FAQ</a>
+    <div class="files">
+      <div class="label">See also</div>
+      <a href="index.html" style="border:0;padding-left:0">SSO auto-login guide</a>
+    </div>
+  </nav>
+
+  <main>
+    <header>
+      <div class="eyebrow">Paul's Job chat widget · integration guide</div>
+      <h1>Layout: put the chat where you want it</h1>
+      <div class="tldr" id="tldr">
+        <b>TL;DR</b> — By default the widget is a floating pill with a card above it, over your page. Pass
+        <code>layout: { mode: 'rail', anchor: { selector: '#hyrd-rail' } }</code> and it becomes a full-height
+        panel <em>inside a node you own</em>, in your own document flow, with your CSS deciding how wide it is.
+        In that mode there is no hyrd launcher — you open it from your own button with
+        <code>window.HyrdWidget.open()</code>. <strong><code>mode</code> and <code>anchor</code> have no default
+        value</strong>: say nothing and nothing changes; name a rail and you must also name its anchor.
+      </div>
+    </header>
+
+    <p>This guide is for third-party integrators embedding the widget on your own site. It documents the
+      <code>options.layout</code> surface, the public <code>window.HyrdWidget</code> API, and the two CSS rules
+      that keep your layout honest when the widget is not there. If you also need auto-login, see the
+      <a href="index.html">SSO integration guide</a>.</p>
+
+    <h2 id="modes">The three modes</h2>
+    <p>One knob picks the shape, per page, from your own snippet. It is a <strong>desktop</strong> distinction:
+      below 768px all three converge on the same full-screen chat.</p>
+
+    <div class="twrap">
+      <table>
+        <thead><tr><th>Mode</th><th>What you get</th><th>hyrd launcher</th><th>WhatsApp CTA</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>floating</code></td>
+            <td>Today's pill plus a 530px card above it, both <code>position: fixed</code> over your page.</td>
+            <td class="yes">painted</td><td class="yes">if your tenant enabled it</td>
+          </tr>
+          <tr>
+            <td><code>wide</code></td>
+            <td>The full-bleed sheet. Same thing your recruiter's <code>desktop_wide</code> setting already
+              produces — this is its first-class spelling, pill retained.</td>
+            <td class="yes">painted</td><td class="yes">if your tenant enabled it</td>
+          </tr>
+          <tr>
+            <td><code>rail</code></td>
+            <td>A full-height panel flush to one edge, in a node you own or as a fixed overlay.</td>
+            <td class="no">never</td><td class="no">never</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout warn">
+      <span class="ico">!</span>
+      <div><strong>A <code>rail</code> with no trigger of your own is unreachable, and that is by design.</strong>
+        The mode removes the pill; it does not add a fallback, an edge tab or a reopen affordance. If you pick
+        <code>rail</code> you must wire a button to <code>HyrdWidget.open()</code>.</div>
+    </div>
+
+    <h2 id="knobs">The knob table</h2>
+    <p>Everything the rail introduced lives in a first-class <code>options.layout</code>, beside
+      <code>theme</code> and never inside <code>custom_widget_config</code>. It is <strong>read once, at
+      <code>init</code></strong>, is never sent to the chat iframes, and is never stored on your tenant — it is
+      a per-page decision in the snippet, so the same tenant can have a rail on the dashboard and a pill on the
+      marketing site.</p>
+
+    <div class="twrap">
+      <table>
+        <thead><tr><th>Key</th><th>Type</th><th>Default</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>layout.mode</code></td>
+            <td><code>'floating' | 'wide' | 'rail'</code></td>
+            <td class="none">NO DEFAULT</td>
+            <td>Absent defers to the older spellings — see <a href="#precedence">precedence</a>.</td>
+          </tr>
+          <tr>
+            <td><code>layout.anchor</code></td>
+            <td><code>'viewport'</code> · <code>{ element }</code> · <code>{ selector }</code></td>
+            <td class="none">NO DEFAULT</td>
+            <td><code>rail</code> only. Omitting it on a rail is <strong>refused</strong>, not defaulted.
+              <code>element</code> wins if you pass both.</td>
+          </tr>
+          <tr>
+            <td><code>layout.side</code></td>
+            <td><code>'left' | 'right'</code></td>
+            <td><code>'right'</code></td>
+            <td><code>rail</code> only. Which edge the panel occupies.</td>
+          </tr>
+          <tr>
+            <td><code>layout.width</code></td>
+            <td><code>number</code> (px)</td>
+            <td><code>530</code></td>
+            <td><strong>Viewport anchor only.</strong> Supported 320–640; outside that you get one warning and
+              your number, never a clamp. On a container anchor the width is your stylesheet's.</td>
+          </tr>
+          <tr>
+            <td><code>layout.closeButton</code></td>
+            <td><code>boolean</code></td>
+            <td><code>true</code></td>
+            <td><code>rail</code> only. <code>false</code> is honoured <strong>on desktop only</strong> — the
+              mobile overlay covers your own trigger, so it always keeps its way out.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout">
+      <span class="ico">★</span>
+      <div><strong><code>mode</code> and <code>anchor</code> have no default value, and that is deliberate.</strong>
+        A literal <code>'floating'</code> default would outrank the older spellings and silently revert every
+        tenant using the wide sheet back to a 530px card, so absence has to mean “defer”, not “floating”. And
+        neither anchor is a defensible guess on your behalf: defaulting to a container needs a node nobody gave
+        us, and defaulting to the viewport would drop an overlay on a page that could have reflowed. If you
+        write <code>mode: 'rail'</code>, write an <code>anchor</code> too.</div>
+    </div>
+
+    <p>Keys that do not apply to the mode you picked — <code>anchor</code>, <code>side</code>,
+      <code>width</code> or <code>closeButton</code> on a non-rail mode, or <code>width</code> on a container
+      anchor — are <strong>reported and ignored</strong>, never silently reinterpreted. The widget still mounts.</p>
+
+    <h2 id="precedence">Which spelling wins</h2>
+    <p>There are three ways to ask for the wide sheet, because two of them predate this surface. One rule:
+      <strong>the newest present spelling wins; anything absent defers.</strong></p>
+
+    <div class="twrap">
+      <table>
+        <thead><tr><th>Tier</th><th>Source</th><th>Can produce</th></tr></thead>
+        <tbody>
+          <tr><td>0</td><td><code>options.layout.mode</code></td><td><code>floating</code> · <code>wide</code> · <code>rail</code></td></tr>
+          <tr><td>1</td><td><code>options.desktopWide</code></td><td><code>wide</code> · <code>floating</code></td></tr>
+          <tr><td>2</td><td>your tenant's <code>custom_widget_config.desktop_wide</code> (+ its URL whitelist)</td><td><code>wide</code> · <code>floating</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>Passing a tier-0 key alongside an older one <strong>warns and never throws</strong> — that is exactly what
+      a mid-migration snippet looks like. <code>layout.mode</code> wins, and the console tells you the older key
+      is now inert so you can delete it with confidence. <code>rail</code> can only ever come from tier 0: your
+      tenant settings have none of these knobs.</p>
+
+    <h2 id="api">The imperative API</h2>
+    <p>One singleton, <code>window.HyrdWidget</code>. It is the same API in every mode — <code>rail</code>
+      removes the pill, it does not add the API — so switching modes never changes your JavaScript.</p>
+
+    <div class="twrap">
+      <table>
+        <thead><tr><th>Method</th><th>Returns</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><code>init(options)</code></td><td>—</td><td>Boots the widget.</td></tr>
+          <tr><td><code>startWidget(options)</code></td><td>—</td><td>Permanent alias of <code>init</code>. It will never be renamed.</td></tr>
+          <tr><td><code>open()</code></td><td>—</td><td>Opens the chat. Takes no arguments.</td></tr>
+          <tr><td><code>close()</code></td><td>—</td><td>Closes it, and cancels any pending auto-open.</td></tr>
+          <tr><td><code>toggle()</code></td><td>—</td><td>The obvious thing.</td></tr>
+          <tr><td><code>isOpen()</code></td><td><code>boolean</code></td><td>Reads the current state <strong>synchronously</strong>.</td></tr>
+          <tr><td><code>on(event, fn)</code></td><td><code>() =&gt; void</code></td><td>Subscribes. The return value unsubscribes.</td></tr>
+          <tr><td><code>destroy()</code></td><td>—</td><td>Removes the frames, the listeners and the rail wrapper.</td></tr>
+          <tr><td><code>updateTheme(theme)</code></td><td>—</td><td>Restyles the running widget.</td></tr>
+          <tr><td><code>verifyToken(token)</code></td><td><code>Promise</code></td><td>SSO sign-in — see the <a href="index.html">SSO guide</a>.</td></tr>
+          <tr><td><code>setToken(token)</code></td><td><code>Promise</code></td><td>Adopt a session your page already holds.</td></tr>
+          <tr><td><code>clearToken()</code></td><td><code>Promise</code></td><td>Drops the widget's session.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>Events are <code>ready</code>, <code>open</code>, <code>close</code> and <code>auth</code>. The trigger
+      state catalogue is exactly <strong>open or closed</strong> — there is no unread count and no “agent is
+      typing”, because the pill has never had either. <code>auth</code> is a lifecycle event, not a trigger
+      state.</p>
+
+    <h3>Every method is safe to call at any time</h3>
+    <ul>
+      <li><strong>Before the widget is ready</strong>, calls are remembered as <em>desired state, not a log</em>.
+        Three <code>open()</code> calls before <code>ready</code> open the widget <strong>once</strong>; a
+        <code>close()</code> after them leaves it closed. You never need to poll for an init flag.</li>
+      <li><strong>Before ready, <code>isOpen()</code> answers with what you asked for</strong>, not <code>false</code>,
+        so a trigger painted from it on first paint agrees with the click that caused it.</li>
+      <li><strong>Against a destroyed widget</strong> every method logs one warning and no-ops. It never throws
+        inside your click handler. Calling <code>init()</code> again revives it.</li>
+      <li><strong><code>ready</code> always precedes any <code>open</code></strong> — including the opens that
+        happen with no action from you (the timed auto-open, and the ~150ms open when the page carries a
+        <code>login_token</code>). A listener attached in your <code>ready</code> handler cannot miss the first
+        transition.</li>
+    </ul>
+
+    <div class="callout warn">
+      <span class="ico">!</span>
+      <div><strong>A refused <code>init</code> never fires <code>ready</code>.</strong> If your anchor fails one
+        of the preconditions below, <code>init</code> aborts before any network call — no frames, no fetch — and
+        the console error is the only signal. A trigger you gated on <code>on('ready')</code> correctly never
+        lights up.</div>
+    </div>
+
+    <h3>Painting your trigger, race-free</h3>
+    <p><code>on()</code> emits <strong>pure transitions and never replays</strong>; <code>isOpen()</code> is the
+      reconciliation. Emission is synchronous, so subscribing and reading in <em>one tick</em> cannot miss a
+      transition and cannot read a stale value. No retry loop, no polling.</p>
+
+<pre><span class="cm">// The documented recipe. All three lines in one tick.</span>
+const offOpen  = window.HyrdWidget.<span class="hl">on</span>('open',  () =&gt; paint(true))
+const offClose = window.HyrdWidget.<span class="hl">on</span>('close', () =&gt; paint(false))
+paint(window.HyrdWidget.<span class="hl">isOpen</span>())   <span class="cm">// reconcile whatever happened before you subscribed</span>
+
+function paint(open) {
+  button.setAttribute('aria-expanded', String(open))
+  button.textContent = open ? 'Close assistant' : 'Ask the assistant'
+}
+
+<span class="cm">// Both return an unsubscribe — call them when your component unmounts.</span>
+onUnmounted(() =&gt; { offOpen(); offClose() })</pre>
+
+    <h2 id="anchor">The container-anchor contract</h2>
+    <p>This is the mode the rail exists for: you name a node you already render, and the chat appears
+      <em>inside</em> it, in your own document flow, with your own layout squeezing to make room.</p>
+
+    <div class="flow">
+      <svg viewBox="0 0 720 200" role="img" aria-label="Your flex row: your content squeezes, your rail node holds one wrapper we own, which holds the chat iframe">
+        <rect class="box" x="8" y="24" width="330" height="150" rx="9"/>
+        <text class="lbl" x="173" y="52" text-anchor="middle">Your content</text>
+        <text class="sub" x="173" y="72" text-anchor="middle">flex: 1 — squeezes on its own</text>
+        <text class="sub" x="173" y="120" text-anchor="middle">no SDK involvement</text>
+
+        <rect class="box-hl" x="366" y="24" width="200" height="150" rx="9"/>
+        <text class="lbl" x="466" y="50" text-anchor="middle">#hyrd-rail</text>
+        <text class="sub" x="466" y="68" text-anchor="middle">YOUR node · your CSS</text>
+        <text class="sub" x="466" y="84" text-anchor="middle">width + height</text>
+
+        <rect class="box" x="386" y="100" width="160" height="58" rx="7"/>
+        <text class="lbl" x="466" y="122" text-anchor="middle">our one child</text>
+        <text class="sub" x="466" y="140" text-anchor="middle">100% × 100%</text>
+
+        <rect class="box" x="594" y="70" width="118" height="58" rx="9"/>
+        <text class="lbl" x="653" y="94" text-anchor="middle">chat iframe</text>
+        <text class="sub" x="653" y="111" text-anchor="middle">fills the child</text>
+
+        <path class="arw" d="M550 129 H590" marker-end="url(#a)"/>
+        <defs>
+          <marker id="a" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto">
+            <path d="M0 0 L8 4 L0 8 z" fill="var(--gray-500)"/>
+          </marker>
+        </defs>
+      </svg>
+    </div>
+
+    <p>The whole contract is <strong>one <code>appendChild</code> and one <code>remove()</code></strong>:</p>
+    <ul>
+      <li><strong>We append exactly one child to your node and never write a style, a class or an attribute on
+        the node itself.</strong> Your node stays yours; your CSS is never fighting an inline style of ours.</li>
+      <li><strong>Your CSS owns width and height.</strong> Our child is <code>100%</code> / <code>100%</code>, so
+        a media query, a CSS custom property or a <code>transition: width</code> you already wrote just works.
+        There is no <code>ResizeObserver</code> and no layout message crossing the iframe boundary.</li>
+      <li>The child we append carries <code>class="hyrd-rail-sdk"</code> and three attributes you can select on:
+        <code>data-hyrd-layout="rail" | "overlay"</code>, <code>data-hyrd-side="left" | "right"</code> and
+        <code>data-hyrd-anchor="container" | "viewport"</code>.</li>
+    </ul>
+
+    <h3>Pass the node as an element or a selector</h3>
+<pre><span class="cm">// Whichever your framework hands you at the moment you call init.</span>
+layout: { mode: 'rail', anchor: { <span class="hl">selector</span>: '#hyrd-rail' } }
+layout: { mode: 'rail', anchor: { <span class="hl">element</span>: railRef.value } }
+
+<span class="cm">// Both? `element` wins — a reference cannot go stale, a selector can.</span></pre>
+
+    <h3>The four preconditions</h3>
+    <p>Checked synchronously at <code>init</code>, before any network call. Every check is a <em>read</em>
+      (<code>querySelectorAll</code>, <code>getComputedStyle</code>, a bounding rect), so a refusal cannot itself
+      damage the page it refuses. Fail any one and <strong>nothing mounts</strong>.</p>
+
+    <div class="twrap">
+      <table>
+        <thead><tr><th>#</th><th>The node must…</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>1</td><td>be <strong>empty</strong></td>
+            <td>This is what makes <code>:empty</code> trustworthy as “the widget is gone”. It is the CSS
+              predicate, exactly: comments are fine, <em>a whitespace text node is not</em>. Write
+              <code>&lt;div id="hyrd-rail"&gt;&lt;/div&gt;</code> with nothing between the tags.</td>
+          </tr>
+          <tr>
+            <td>2</td><td>have <strong>no ancestor</strong> with a <code>transform</code>, <code>filter</code> or
+              <code>will-change</code></td>
+            <td>Any of those makes the ancestor the containing block for <code>position: fixed</code>, which
+              traps every overlay the chat paints — dialogs, drawers, the mobile sheet — in the wrong box.</td>
+          </tr>
+          <tr>
+            <td>3</td><td>have a <strong>flex or grid parent</strong></td>
+            <td><code>flex</code>, <code>inline-flex</code>, <code>grid</code> or <code>inline-grid</code>. That
+              is what squeezes the siblings when the rail opens.</td>
+          </tr>
+          <tr>
+            <td>4</td><td>be <strong>full-height</strong> in that parent</td>
+            <td>A rail is a full-height column. Measured, not read off a declaration —
+              <code>height: 100%</code> under a parent with no resolved height is a lie the computed style
+              still reports.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>…and the ways a selector misses</h3>
+    <ul>
+      <li><strong>Matches nothing</strong> — refused.</li>
+      <li><strong>Matches more than one node</strong> — <strong>refused</strong>, and we say how many. We
+        deliberately do not take the first match: that would make the chat's home depend on document order, so
+        duplicating the node would silently move the chat instead of telling you.</li>
+      <li><strong>Is not a valid CSS selector</strong> — refused.</li>
+      <li>An <code>anchor</code> object with neither a usable <code>element</code> nor a non-empty
+        <code>selector</code> string — refused. So is an <code>anchor</code> that is not <code>'viewport'</code>
+        and not an object at all (<code>anchor: '#rail'</code> is the common typo).</li>
+    </ul>
+
+    <h2 id="failsafe">The two CSS rules you write once</h2>
+    <p>Both hang off the node you already own. Neither needs any JavaScript on your side, and neither has a
+      breakpoint of yours in it.</p>
+
+<pre><span class="cm">/* 1. PERMANENTLY DEAD — the widget is not on the page. */</span>
+<span class="hl">#hyrd-rail:empty { width: 0; }</span>
+
+<span class="cm">/* 2. MOBILE — the rail became a full-screen overlay, so the column is redundant. */</span>
+<span class="hl">#hyrd-rail:has([data-hyrd-layout="overlay"]) { width: 0; }</span></pre>
+
+    <p><strong>Presence in the DOM is the whole fail-safe.</strong> Our child is removed on
+      <code>destroy()</code>, when the chat iframe 404s or your CSP refuses it, and when it fails to initialise
+      within 15 seconds. All three leave your node <code>:empty</code>, so rule 1 collapses the column with no
+      JS from you. A dead widget never leaves a blank column in your layout.</p>
+
+    <div class="callout">
+      <span class="ico">★</span>
+      <div><strong><code>:empty</code> means permanently dead. It never means closed.</strong> Closing hides our
+        frame and <em>leaves the child in place</em> — so those two rules can never disagree about what an empty
+        node means. Which makes the corollary explicit: <strong>collapsing a closed rail is your business, not
+        ours.</strong> Listen for <code>close</code>, set your own class or attribute, and let your own
+        <code>transition: width</code> animate it. We animate nothing, and we ship no edge tab or reopen
+        affordance that would duplicate the trigger you already have.</div>
+    </div>
+
+    <p>The same <code>:empty</code> hook is the honest way to keep your trigger in step with the widget. In
+      <code>floating</code> the trigger dies with the widget because it <em>is</em> the widget; in
+      <code>rail</code> yours outlives it. One more rule fixes that:</p>
+
+<pre><span class="cm">/* A dead widget should not leave a live-looking button. */</span>
+.dashboard:has(#hyrd-rail:empty) .chat-trigger { display: none; }</pre>
+
+    <h2 id="viewport">The viewport anchor</h2>
+    <p>If you cannot restructure your CSS to satisfy the four preconditions, opt into an overlay explicitly:</p>
+
+<pre>layout: { mode: 'rail', anchor: <span class="hl">'viewport'</span>, side: 'right', width: 530 }</pre>
+
+    <p>You get a <code>position: fixed</code> full-height panel pinned to <code>side</code>, at
+      <code>layout.width</code> px (default 530 — today's panel width, the one the chat's layout is already
+      proven at). It reads no node of yours, so it has no precondition to fail. It stacks at your tenant's
+      configured <code>z-index</code> where one is stored.</p>
+
+    <p>The supported width range is <strong>320–640px</strong>. Outside it you get <em>one</em> console warning
+      per page per bound and <strong>your number is honoured exactly as written</strong> — there is no clamp. We
+      cannot enforce a range on a viewport you resize whenever you like, and enforcing it at runtime would mean
+      writing on your layout, which this contract never does. There is no drag-to-resize handle in either
+      anchor.</p>
+
+    <div class="callout warn">
+      <span class="ico">!</span>
+      <div>The overlay is the <strong>low-effort</strong> option, not the good one. It covers your content, and
+        in our own measurements it hid exactly the page furniture the floating pill was hiding — plus the host's
+        own trigger — with no scrollbar to recover it. A container anchor <em>degrades</em> your layout; the
+        overlay <em>occludes</em> it. Prefer the container anchor if you can restructure at all.</div>
+    </div>
+
+    <h2 id="mobile">Mobile</h2>
+    <p>Below <strong>768px</strong> — measured on the host viewport, <code>document.documentElement.clientWidth</code>,
+      the same number every other breakpoint in the widget uses — all three modes converge on the one
+      full-screen chat that already ships. Mode is a desktop-only distinction, and it needs one mobile story,
+      not three.</p>
+    <ul>
+      <li>Our child becomes <code>position: fixed; inset: 0</code> and says so:
+        <code>data-hyrd-layout="overlay"</code>. That attribute is what your second CSS rule reads — so there is
+        <strong>one</strong> breakpoint, ours, and no second number of yours that has to agree with it forever.</li>
+      <li><strong>The child is never re-parented.</strong> Moving an iframe reloads its document, and a phone
+        crosses 768 on <em>every rotation</em>, so re-parenting would destroy a live chat session on a wrist
+        flick. We restyle the node we already own; the iframe never reloads.</li>
+      <li><strong>Your page's scroll is locked</strong> while the overlay is open, so the page does not slide
+        around behind it. It is released the moment the chat closes, the frame dies, or you call
+        <code>destroy()</code>.</li>
+      <li>The close <code>×</code> is always painted here, even if you set <code>closeButton: false</code>: the
+        overlay is sitting on top of your own trigger.</li>
+      <li>Tablets between 768 and 1024 get a <strong>real rail</strong>. The rail is never hidden on phones —
+        deleting the chat is not a layout decision.</li>
+    </ul>
+
+    <h2 id="chrome">The rail's edge, and its close button</h2>
+    <p>The rail uses your tenant's colours exactly as the floating card does — there is no second theming
+      surface to configure. Its one visual difference is an edge: <code>border-radius: 0</code>, no shadow, and
+      <strong>one border on the <code>side</code>-facing edge only</strong> (a rail on the right borders its
+      left), so the panel reads as a panel and not as part of your page.</p>
+
+    <p>That edge ships as an ordinary <strong>author stylesheet rule</strong>, not an inline style, keyed on the
+      published selector — precisely so you can override it when it disappears against your own background:</p>
+
+<pre><span class="cm">/* Ours, injected once into your document. */</span>
+[data-hyrd-layout="rail"] { border: 0 solid …; border-radius: 0; box-shadow: none; }
+[data-hyrd-layout="rail"][data-hyrd-side="right"] { border-left-width: 1px; }
+
+<span class="cm">/* Yours — any of these outrank it comfortably. */</span>
+<span class="hl">#hyrd-rail &gt; [data-hyrd-layout="rail"] { border-left-color: #1f2937; }</span></pre>
+
+    <div class="callout">
+      <span class="ico">★</span>
+      <div>Contrast against <em>your</em> page is yours to own — which is only an honest thing to say if you can
+        act on it, hence a rule you can outrank rather than an inline style you cannot. Note that a CSS reset
+        shipping <code>*, ::before, ::after { border-width: 0 }</code> (Tailwind's and UnoCSS's preflights both
+        do) will delete our edge outright. Put it back with the selector above if you want it.</div>
+    </div>
+
+    <h2 id="floating">Moving the floating pill</h2>
+    <p>Two knobs have always worked from the SDK and have never been written down. They are now the supported
+      contract, and they keep their existing spellings: they live in <code>theme</code>, deliberately
+      <strong>not</strong> mirrored into <code>options.layout</code>, which means exactly “the knobs the rail
+      introduced”. <em>This is a decision, not an oversight — please don't file it as one.</em></p>
+
+    <div class="twrap">
+      <table>
+        <thead><tr><th>Key</th><th>Values</th><th>Default</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>theme.position</code></td>
+            <td><code>'bottom_right'</code> · <code>'bottom_center'</code> · <code>'bottom_left'</code></td>
+            <td><code>'bottom_right'</code></td>
+            <td>Which corner the launcher and its card occupy. Your value overrides your tenant's.</td>
+          </tr>
+          <tr>
+            <td><code>theme.custom_widget_config.desktop_button_space</code></td>
+            <td><code>number</code> (px)</td>
+            <td><code>30</code></td>
+            <td>The launcher's offset from both edges, on desktop. Mobile uses a fixed 8px.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+<pre>window.HyrdWidget.startWidget({
+  company: 'acme',
+  theme: {
+    <span class="hl">position</span>: 'bottom_left',
+    custom_widget_config: { <span class="hl">desktop_button_space</span>: 24 },
+  },
+})</pre>
+
+    <p>A <code>position</code> outside the three-value enum gets <strong>one warning and the default corner</strong>
+      — it can no longer reach a CSS string as <code>"undefined"</code>, throw, or silently do nothing, which are
+      the three ways it used to fail. A bad value <em>stored by your recruiter</em> is clamped in silence: you
+      cannot see their settings, so you are not blamed for them. Both are read at <code>init</code>, like
+      <code>layout</code> — a later <code>updateTheme()</code> restyles the widget but does not move it.</p>
+
+    <div class="callout warn">
+      <span class="ico">!</span>
+      <div>Known limit: <code>desktop_button_space: 0</code> is not expressible — a stored zero is how the
+        settings represent “empty”, so it falls back to 30. A launcher flush to the corner is not currently
+        reachable from either layer. Per-axis offsets, top placement and collision avoidance are not supported.</div>
+    </div>
+
+    <h2 id="console">What the console tells you</h2>
+    <p>Messages are <strong>always on in production</strong> — there is no debug flag, because a flag would mean
+      being told about a misconfiguration only if you already suspected one. <strong>A correct integration emits
+      nothing at all</strong>, so any message is signal. Every one is prefixed <code>[hyrd-widget]</code>, leads
+      with the key path as a greppable token, says its tier in words, passes the offending node or value as the
+      second console argument so devtools highlights it, and ends with a link back to this page.</p>
+
+    <div class="twrap">
+      <table>
+        <thead><tr><th>Tier</th><th>What</th><th>Console</th><th>Outcome</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>A</strong></td>
+            <td>Shape errors — unknown mode, wrong type, an illegal combination, an off-enum
+              <code>theme.position</code></td>
+            <td><code>warn</code></td>
+            <td>Key ignored, <strong>widget still mounts</strong></td>
+          </tr>
+          <tr>
+            <td><strong>B</strong></td>
+            <td>Anchor refusals — the four preconditions, a missing anchor, an unreadable anchor, and the
+              selector misses</td>
+            <td><code>error</code></td>
+            <td><strong>Nothing mounts</strong>, <code>init</code> aborts, <code>ready</code> never fires</td>
+          </tr>
+          <tr>
+            <td><strong>C</strong></td>
+            <td>Width outside 320–640</td>
+            <td>one <code>warn</code> per bound, per page</td>
+            <td>Your value is <strong>honoured</strong>, never clamped</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>A and C leave a working widget on the screen, which is feedback in itself. B is the only class with no
+      other signal, which is why B alone is an <code>error</code>.</p>
+
+<pre><span class="bad">[hyrd-widget] layout.anchor.selector: '#hyrd-rail' matched 3 elements — a rail needs
+exactly one. Nothing is mounted and `ready` never fires.
+See https://hyrdrocks.github.io/paulsjob-chat-sso-example/widget-layout.html</span>  &lt;div id="hyrd-rail"&gt;</pre>
+
+    <p>The second console argument is the offending element or value, so devtools lets you click straight
+      through to it.</p>
+
+    <h2 id="worked">Worked example — a dashboard shell</h2>
+    <p>A three-part page: a top bar with your own trigger, your content, and a rail node as the third child of a
+      flex row. Copy it whole; it satisfies all four preconditions.</p>
+
+    <div class="tabs" data-tabs>
+      <div class="tabbar">
+        <button class="on" data-t="0">index.html</button>
+        <button data-t="1">styles.css</button>
+        <button data-t="2">widget.js</button>
+      </div>
+<pre class="on"><span class="cm">&lt;!-- The shell. `#hyrd-rail` is EMPTY — no whitespace between the tags. --&gt;</span>
+&lt;div class="dashboard"&gt;
+  &lt;header class="dashboard__bar"&gt;
+    &lt;h1&gt;Employees&lt;/h1&gt;
+    &lt;button <span class="hl">class="chat-trigger"</span> type="button" aria-expanded="false"&gt;
+      Ask the assistant
+    &lt;/button&gt;
+  &lt;/header&gt;
+
+  <span class="cm">&lt;!-- The flex row. Your content squeezes; the rail is the third child. --&gt;</span>
+  &lt;div class="dashboard__body"&gt;
+    &lt;nav class="dashboard__nav"&gt;…&lt;/nav&gt;
+    &lt;main class="dashboard__main"&gt;…your table, your pagination…&lt;/main&gt;
+    <span class="hl">&lt;div id="hyrd-rail"&gt;&lt;/div&gt;</span>
+  &lt;/div&gt;
+&lt;/div&gt;</pre>
+<pre>.dashboard { display: flex; flex-direction: column; height: 100dvh; }
+.dashboard__bar  { flex: none; display: flex; justify-content: space-between; }
+
+<span class="cm">/* Precondition 3: a flex parent. Precondition 4: the rail stretches to full height,
+   which `align-items: stretch` (the default) already does for you. */</span>
+.dashboard__body { <span class="hl">display: flex</span>; flex: 1; min-height: 0; }
+.dashboard__main { flex: 1; min-width: 0; overflow: auto; }
+
+<span class="cm">/* YOUR width, YOUR transition. The SDK animates nothing and never touches this node. */</span>
+#hyrd-rail {
+  flex: none;
+  <span class="hl">width: 420px;</span>
+  <span class="hl">transition: width 180ms ease;</span>
+}
+
+<span class="cm">/* Rule 1 — the widget is permanently gone (destroy, CSP, 404, ready timeout). */</span>
+<span class="hl">#hyrd-rail:empty { width: 0; }</span>
+
+<span class="cm">/* Rule 2 — below 768 the rail is a full-screen overlay, so the column is redundant. */</span>
+<span class="hl">#hyrd-rail:has([data-hyrd-layout="overlay"]) { width: 0; }</span>
+
+<span class="cm">/* Closing is YOURS. We only emit the `close` event; this is what collapses the column. */</span>
+#hyrd-rail[data-closed] { width: 0; }
+
+<span class="cm">/* And a dead widget should not leave a live-looking button. */</span>
+.dashboard:has(#hyrd-rail:empty) .chat-trigger { display: none; }
+
+<span class="cm">/* CAREFUL: a `transform`, `filter` or `will-change` on ANY ancestor of #hyrd-rail
+   is precondition 2, and the rail will be refused. A hover lift on .dashboard, a
+   `will-change: transform` left over from an animation — both bite. */</span></pre>
+<pre><span class="cm">// Runs once your shell is in the DOM — the anchor must exist when you call init.</span>
+const trigger = document.querySelector('.chat-trigger')
+const rail = document.getElementById('hyrd-rail')
+
+const config = {
+  company: 'acme',
+  domain: 'https://acme.chatbot.app.paulsjob.ai',
+  employee_mode: true,
+  <span class="hl">layout</span>: {
+    mode: <span class="hl">'rail'</span>,
+    anchor: { selector: <span class="hl">'#hyrd-rail'</span> },   <span class="cm">// or { element: rail }</span>
+    side: 'right',                          <span class="cm">// the default; written for clarity</span>
+  },
+}
+
+<span class="cm">// Boot. If the bundle is already there, start directly; otherwise queue the config</span>
+<span class="cm">// and load it — the singleton exists the moment the script has evaluated.</span>
+if (window.HyrdWidget?.startWidget) {
+  window.HyrdWidget.startWidget(config)
+  wire()
+} else {
+  window.HyrdWidget = { <span class="hl">readyQueue</span>: [config] }
+  const s = document.createElement('script')
+  s.src = 'https://acme.chatbot.app.paulsjob.ai/sdk.iife.js'
+  s.async = true
+  s.addEventListener('load', wire)
+  document.body.appendChild(s)
+}
+
+<span class="cm">// From here every method is safe to call at any time. The widget is NOT ready yet —</span>
+<span class="cm">// it is still fetching its config — and none of this has to wait for it.</span>
+function wire() {
+  trigger.addEventListener('click', () =&gt; window.HyrdWidget.<span class="hl">toggle</span>())
+
+  <span class="cm">// One tick: subscribe, subscribe, reconcile. No polling, no retry loop.</span>
+  window.HyrdWidget.<span class="hl">on</span>('open',  () =&gt; setOpen(true))
+  window.HyrdWidget.<span class="hl">on</span>('close', () =&gt; setOpen(false))
+  setOpen(window.HyrdWidget.<span class="hl">isOpen</span>())
+}
+
+function setOpen(open) {
+  trigger.setAttribute('aria-expanded', String(open))
+  <span class="cm">// The rail's collapse is ours to drive — the SDK leaves its child in place.</span>
+  rail.toggleAttribute('data-closed', !open)
+}</pre>
+    </div>
+
+    <div class="callout">
+      <span class="ico">★</span>
+      <div>The width above (<code>420px</code>) is an example, not a recommendation. At 1440×900 a 530px rail
+        leaves 670px for a table that wants 880 — the toolbar wraps and columns drop — while 380px leaves 820px
+        and the chat itself starts reading narrow. Both sides degrade smoothly in opposite directions, so the
+        number is a trade-off only you can make, against your own users' screens. That is why it is your CSS and
+        not our knob.</div>
+    </div>
+
+    <div class="callout warn">
+      <span class="ico">!</span>
+      <div>If you mount from a framework hook that runs on every route (a Nuxt client plugin on
+        <code>app:mounted</code>, say), the rail lands on <strong>every</strong> route until you scope where you
+        call <code>init</code>. <code>layout</code> is init-only — per-route scoping is <em>where you call
+        <code>init</code></em>, and there is no <code>setLayout</code>.</div>
+    </div>
+
+    <h2 id="limits">Limits and caveats</h2>
+
+    <h3><code>rail</code> is not the escape hatch for a career page with furniture</h3>
+    <p>It is tempting to reach for <code>rail</code> whenever the floating pill is over something important. It
+      will usually not help. The container anchor's four preconditions bite hardest on exactly the pages that
+      were not built with a shell — an ordinary marketing or career page has no full-height flex column to hand
+      — and the viewport anchor <em>occludes more</em> than the pill it replaced, not less. The rail answers a
+      dashboard's problem: a page that already has a shell, in-flow furniture and a trigger of its own. If your
+      page is not that, move the pill with <a href="#floating"><code>theme.position</code></a> instead.</p>
+
+    <h3>A caveat about inline styles on our frames</h3>
+    <div class="callout">
+      <span class="ico">★</span>
+      <div><strong>Inline styles on hyrd-owned frames are maintained by live effects and are not durable.</strong>
+        If you write to the <code>style</code> attribute of one of our iframes or wrappers, an effect may
+        overwrite it on the next theme change, resize or state transition. In <code>rail</code>, size
+        <em>your own anchor node</em> instead — that node is yours, we never write on it, and our child simply
+        fills it.
+        <br><br>
+        This is a caveat, not a contract: there is no enforcement, no tier, and nothing detectable at
+        <code>init</code>. It is written down because it is the mistake that looks like it should work.</div>
+    </div>
+
+    <h3>Not supported, on purpose</h3>
+    <ul>
+      <li>No <code>setLayout</code> and no runtime mode switching — <code>layout</code> is init-only.</li>
+      <li>No configurable mobile breakpoint. 768 is fixed.</li>
+      <li>No drag-to-resize handle in either anchor, no SDK-owned edge tab, no SDK-owned animation, and no SDK
+        mutation of your layout.</li>
+      <li>No unread count and no “agent is typing” on the trigger. The state catalogue is open or closed.</li>
+      <li>None of these knobs are settable by your recruiter in the Paul's Job admin, and none of them reach our
+        backend. An anchor names a node in a page no recruiter has seen.</li>
+    </ul>
+
+    <h2 id="faq">FAQ</h2>
+    <dl class="faq">
+      <dt>I changed nothing. Does upgrading the SDK change how my widget looks?</dt>
+      <dd>No. Absence of the new keys means today's behaviour, exactly — that is the whole reason
+        <code>layout.mode</code> has no default.</dd>
+
+      <dt>My recruiter turned on the wide sheet. Will my snippet override it?</dt>
+      <dd>Only if you write <code>layout.mode</code>. If you do, it wins and you get a console warning telling
+        you the tenant setting is inert on that page. Say nothing and their setting still applies.</dd>
+
+      <dt>Nothing rendered and there is a red message in my console.</dt>
+      <dd>That is a tier-B refusal: your anchor failed a precondition, or the selector matched zero or several
+        nodes. The message names the key and highlights the offending element. Nothing mounted, no network call
+        was made, and <code>ready</code> did not fire.</dd>
+
+      <dt>My rail node is a blank column and there is no chat in it.</dt>
+      <dd>You almost certainly have not written <code>#hyrd-rail:empty { width: 0 }</code>. Our child is removed
+        when the widget dies (CSP, a 404, or the 15s initialise timeout), and that rule is what collapses the
+        column afterwards.</dd>
+
+      <dt>My node was refused for “already has children” but it looks empty.</dt>
+      <dd>It has a whitespace text node. <code>&lt;div id="hyrd-rail"&gt;\n&lt;/div&gt;</code> is not
+        <code>:empty</code> by the CSS definition, and if we accepted it your collapse rule would never match.
+        Close the tag immediately.</dd>
+
+      <dt>Can I collapse the rail myself when it closes?</dt>
+      <dd>You must — nobody else will. Listen for <code>close</code> and drive your own node's width. We hide
+        our frame and leave the child in place, so <code>:empty</code> keeps its one meaning.</dd>
+
+      <dt>Does the chat survive a phone rotation?</dt>
+      <dd>Yes. We never re-parent the wrapper across the breakpoint, precisely because moving an iframe reloads
+        it. A rotation is just a resize.</dd>
+
+      <dt>Can I use the rail and SSO auto-login together?</dt>
+      <dd>Yes, they are independent. Add <code>onStartAutologin</code> and <code>verifyToken()</code> from the
+        <a href="index.html">SSO guide</a> to the same config object.</dd>
+
+      <dt>Why is there no <code>error</code> event when the widget dies?</dt>
+      <dd>Because it would need opting into, and the fail-safe must work for a host who wired no JavaScript at
+        all. The DOM is the signal: our child is gone, so <code>:empty</code> matches.</dd>
+    </dl>
+  </main>
+</div>
+
+<script>
+document.querySelectorAll('[data-tabs]').forEach(box => {
+  const btns = box.querySelectorAll('button')
+  const panes = box.querySelectorAll('pre')
+  btns.forEach(b => b.addEventListener('click', () => {
+    btns.forEach(x => x.classList.remove('on'))
+    panes.forEach(x => x.classList.remove('on'))
+    b.classList.add('on')
+    panes[+b.dataset.t].classList.add('on')
+  }))
+})
+
+const root = document.documentElement
+const btn = document.getElementById('theme')
+const sync = () => { btn.textContent = root.classList.contains('dark') ? 'Light' : 'Dark' }
+btn.addEventListener('click', () => {
+  root.classList.toggle('dark')
+  localStorage.setItem('theme', root.classList.contains('dark') ? 'dark' : 'light')
+  sync()
+})
+sync()
+</script>
+</body>
+</html>
